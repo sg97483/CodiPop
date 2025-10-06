@@ -272,15 +272,24 @@ const VirtualFittingScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.topContainer}>
         {isProcessing ? (
-          <ActivityIndicator size="large" color="#6A0DAD" />
+          <View style={styles.processingContainer}>
+            <ActivityIndicator size="large" color="#6A0DAD" />
+            <Text style={styles.processingText}>이미지 합성 중...</Text>
+          </View>
         ) : resultImage ? (
-          <TouchableOpacity onPress={handleDownloadImage}>
-            <Animated.Image
-              source={{uri: resultImage}}
-              style={[styles.resultImage, {opacity: fadeAnim}]}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
+          <View style={styles.resultContainer}>
+            <TouchableOpacity onPress={handleDownloadImage}>
+              <Animated.Image
+                source={{uri: resultImage}}
+                style={[styles.resultImage, {opacity: fadeAnim}]}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+            <View style={styles.resultOverlay}>
+              <Text style={styles.resultSuccessText}>✅ 피팅 완료!</Text>
+              <Text style={styles.resultSubText}>탭하여 다운로드</Text>
+            </View>
+          </View>
         ) : personImage ? (
           <Image
             source={{uri: personImage}}
@@ -301,9 +310,19 @@ const VirtualFittingScreen = () => {
           onPress={handleSelectPerson}>
           <Text style={styles.changePersonText}>👤 사람 변경</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tryOnButton} onPress={handleTryOn}>
-          <Text style={styles.tryOnButtonText}>피팅 시작 🚀</Text>
-        </TouchableOpacity>
+        {resultImage ? (
+          <TouchableOpacity style={styles.newTryOnButton} onPress={() => {
+            setResultImage(null);
+            setPersonImage(null);
+            setSelectedClothingImage(null);
+          }}>
+            <Text style={styles.newTryOnButtonText}>새 피팅 시작 🔄</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.tryOnButton} onPress={handleTryOn}>
+            <Text style={styles.tryOnButtonText}>피팅 시작 🚀</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.bottomContainer}>
@@ -392,7 +411,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
   },
+  processingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  processingText: {
+    fontSize: 16,
+    color: '#6A0DAD',
+    fontWeight: 'bold',
+    marginTop: 16,
+  },
+  resultContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
   resultImage: {width: '100%', height: '100%'},
+  resultOverlay: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    backgroundColor: 'rgba(106, 13, 173, 0.9)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  resultSuccessText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  resultSubText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    marginTop: 2,
+  },
   placeholderPerson: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -459,6 +514,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tryOnButtonText: {color: 'white', fontWeight: 'bold', fontSize: 14},
+  newTryOnButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  newTryOnButtonText: {color: 'white', fontWeight: 'bold', fontSize: 14},
 });
 
 export default VirtualFittingScreen;

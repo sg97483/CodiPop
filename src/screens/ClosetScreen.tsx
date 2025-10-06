@@ -42,24 +42,45 @@ const ClosetScreen = () => {
 
   useEffect(() => {
     if (isFocused && user) {
+      console.log('📱 옷장 데이터 로딩 시작 - 사용자:', user.uid);
+      
       const subscriber = firestore()
         .collection('users')
         .doc(user.uid)
         .collection('closet')
         .orderBy('createdAt', 'desc')
-        .onSnapshot(querySnapshot => {
-          const items: ClosetItem[] = [];
-          querySnapshot.forEach(documentSnapshot => {
-            items.push({
-              id: documentSnapshot.id,
-              imageUrl: documentSnapshot.data().imageUrl,
-              category: documentSnapshot.data().category,
+        .onSnapshot(
+          querySnapshot => {
+            console.log('📊 Firestore 스냅샷 업데이트:', querySnapshot.size, '개 아이템');
+            
+            const items: ClosetItem[] = [];
+            querySnapshot.forEach(documentSnapshot => {
+              const data = documentSnapshot.data();
+              console.log('📄 아이템 데이터:', {
+                id: documentSnapshot.id,
+                imageUrl: data.imageUrl,
+                category: data.category,
+                createdAt: data.createdAt
+              });
+              
+              items.push({
+                id: documentSnapshot.id,
+                imageUrl: data.imageUrl,
+                category: data.category,
+              });
             });
-          });
-          setClosetItems(items);
-          setImageLoading({});
-          setLoading(false);
-        });
+            
+            console.log('✅ 옷장 아이템 업데이트 완료:', items.length, '개');
+            setClosetItems(items);
+            setImageLoading({});
+            setLoading(false);
+          },
+          error => {
+            console.error('❌ Firestore 스냅샷 오류:', error);
+            Alert.alert('오류', '옷장 데이터를 불러오는 중 문제가 발생했습니다.');
+            setLoading(false);
+          }
+        );
       return () => subscriber();
     }
   }, [isFocused, user]);
@@ -75,23 +96,60 @@ const ClosetScreen = () => {
     navigation.navigate('VirtualFitting', {clothingUrl: imageUrl});
   };
 
+  // 디버깅을 위한 함수들
+  const handleDebugInfo = () => {
+    console.log('🔍 디버그 정보:');
+    console.log('- 현재 사용자:', user?.uid);
+    console.log('- 옷장 아이템 수:', closetItems.length);
+    console.log('- 활성 카테고리:', activeCategory);
+    console.log('- 표시된 아이템 수:', displayedItems.length);
+    console.log('- 로딩 상태:', loading);
+    
+    Alert.alert(
+      '디버그 정보', 
+      `사용자: ${user?.uid || '없음'}\n옷장 아이템: ${closetItems.length}개\n표시된 아이템: ${displayedItems.length}개\n로딩: ${loading ? '중' : '완료'}`
+    );
+  };
+
   const handleDeleteItem = (itemId: string) => {
     Alert.alert('삭제 확인', '정말로 이 아이템을 옷장에서 삭제하시겠습니까?', [
       {text: '취소', style: 'cancel'},
       {
         text: '삭제',
-        onPress: () => {
-          if (user) {
-            firestore()
+        onPress: async () => {
+          if (!user) {
+            Alert.alert('오류', '로그인이 필요합니다.');
+            return;
+          }
+
+          try {
+            // 로딩 상태 표시 (선택사항)
+            console.log('🗑️ 아이템 삭제 시작:', itemId);
+            
+            await firestore()
               .collection('users')
               .doc(user.uid)
               .collection('closet')
               .doc(itemId)
-              .delete()
-              .then(() => console.log('아이템이 삭제되었습니다!'))
-              .catch(error =>
-                Alert.alert('오류', '삭제 중 문제가 발생했습니다.'),
-              );
+              .delete();
+            
+            console.log('✅ 아이템이 성공적으로 삭제되었습니다!');
+            
+            // 성공 메시지 (선택사항)
+            // Toast.show({type: 'success', text1: '아이템이 삭제되었습니다!'});
+            
+          } catch (error: any) {
+            console.error('❌ 삭제 중 오류 발생:', error);
+            
+            // 더 구체적인 에러 메시지
+            let errorMessage = '삭제 중 문제가 발생했습니다.';
+            if (error?.code === 'permission-denied') {
+              errorMessage = '삭제 권한이 없습니다.';
+            } else if (error?.code === 'unavailable') {
+              errorMessage = '네트워크 연결을 확인해주세요.';
+            }
+            
+            Alert.alert('오류', errorMessage);
           }
         },
         style: 'destructive',
@@ -102,7 +160,12 @@ const ClosetScreen = () => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.headerTitle}>내 옷장</Text>
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerTitle}>내 옷장</Text>
+          <TouchableOpacity onPress={handleDebugInfo} style={styles.debugButton}>
+            <Text style={styles.debugButtonText}>🔍</Text>
+          </TouchableOpacity>
+        </View>
         <ActivityIndicator style={{flex: 1}} size="large" />
       </SafeAreaView>
     );
@@ -110,7 +173,12 @@ const ClosetScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.headerTitle}>내 옷장</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>내 옷장</Text>
+        <TouchableOpacity onPress={handleDebugInfo} style={styles.debugButton}>
+          <Text style={styles.debugButtonText}>🔍</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.categoryContainer}>
         <FlatList
@@ -203,11 +271,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+    flex: 1,
     textAlign: 'center',
-    padding: 20,
+  },
+  debugButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#6A0DAD',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  debugButtonText: {
+    fontSize: 18,
+    color: '#FFFFFF',
   },
   categoryContainer: {
     paddingVertical: 10,
