@@ -1,0 +1,47 @@
+{
+  "translation": {
+    "appName": "CodiPOP",
+    "welcomeTitle": "시작해볼까요!",
+    "welcomeSubtitle": "로그인하고 AI 피팅을 시작해보세요!",
+    "googleLogin": "Google로 계속하기",
+    "appleLogin": "Apple로 계속하기",
+
+    "onboarding1Title": "옷, 이제 입어보지 말고 POP!",
+    "onboarding1Description": "궁금한 옷과 내 사진만 준비하세요. 직접 입어보지 않아도 CodiPOP이 완벽한 가상 피팅을 선사합니다.",
+    "onboarding2Title": "AI 스타일리스트, 코디팝",
+    "onboarding2Description": "CodiPOP의 똑똑한 AI가 1초 만에 옷을 입은 모습을 보여줘요. 쇼핑의 마법이 당신의 폰에서 펼쳐집니다.",
+    "onboarding3Title": "가장 나다운 스타일을 찾아서",
+    "onboarding3Description": "쇼핑 실패는 이제 그만. 다양한 스타일을 마음껏 탐색하고, 가장 잘 어울리는 옷을 확신을 갖고 구매하세요.",
+    
+    "skip": "건너뛰기",
+    "continueButton": "계속하기",
+    "getStarted": "시작하기",
+
+    "fandomPreferencesTitle": "나의 팬덤 취향",
+    "fandomPreferencesSubtitle": "최애 아티스트 또는 관심사를 알려주세요. 당신의 스타일에 맞춰 추천해 드릴게요.",
+    "searchFandomPlaceholder": "최애 아티스트 또는 관심사 검색",
+    "selectionLimitExceededTitle": "선택 제한",
+    "selectionLimitExceededMessage": "최대 {{max}}개까지 선택할 수 있습니다.",
+    "pleaseSelectTagsTitle": "취향 선택",
+    "pleaseSelectTagsMessage": "계속하려면 하나 이상의 팬덤 취향을 선택해 주세요.",
+    "personalTouchTitle": "개인 정보 추가",
+    "personalTouchSubtitle": "더 나은 여행 경험을 위해, 당신에 대해 조금 더 알고 싶어요.",
+    "fullNameLabel": "이름",
+    "fullNamePlaceholder": "전체 이름을 입력하세요",
+    "emailLabel": "이메일",
+    "emailPlaceholder": "이메일 주소를 입력하세요",
+    "fillAllFieldsTitle": "정보 미입력",
+    "fillAllFieldsMessage": "계속하려면 모든 필수 항목을 입력해주세요.",
+    "signUpSuccessTitle": "모든 준비가 끝났어요!",
+    "signUpSuccessSubtitle": "축하합니다! 이제 '같이' 커뮤니티의 일원이 되셨습니다. 당신을 위한 맞춤형 여행 경험이 기다리고 있습니다.",
+    "exploreButton": "여행지 둘러보기",
+    "tabHome": "홈",
+    "tabSaved": "저장",
+    "tabMyTrips": "내 여행",
+    "tabSettings": "설정",
+    "searchHomePlaceholder": "K-문화 장소, 친구, 관심사 검색",
+    "popularSpotsTitle": "인기 있는 K-문화 장소",
+    "latestArticlesTitle": "최신 팬덤 글",
+    "viewAll": "모두 보기"
+  }
+}

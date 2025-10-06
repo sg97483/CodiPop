@@ -1,0 +1,37 @@
+// KachiApp/android/build.gradle (최종 수정본)
+
+buildscript {
+    ext {
+        buildToolsVersion = "34.0.0"
+        minSdkVersion = 23
+        compileSdkVersion = 34
+        targetSdkVersion = 34
+        ndkVersion = "26.1.10909125"
+        kotlinVersion = "1.9.22" // 라이브러리 호환성을 위해 1.9.22 유지
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // 안드로이드 빌드 도구 버전을 명확하게 지정합니다.
+        classpath("com.android.tools.build:gradle:8.2.1")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        // 코틀린 플러그인 버전을 위에서 정의한 kotlinVersion 변수와 연결합니다.
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        // parkingpark에서 검증된 안정적인 버전을 사용합니다.
+        classpath 'com.google.gms:google-services:4.3.15'
+    }
+}
+
+// parkingpark의 핵심 안정화 코드를 가져온 부분입니다.
+allprojects {
+    configurations.all {
+        resolutionStrategy {
+            // play-services-location 라이브러리의 버전을 21.0.1로 강제합니다.
+            force 'com.google.android.gms:play-services-location:21.0.1'
+        }
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"

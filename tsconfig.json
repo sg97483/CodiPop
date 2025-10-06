@@ -1,0 +1,21 @@
+{
+  "extends": "@react-native/typescript-config/tsconfig.json",
+  "compilerOptions": {
+    /* ----- 기존 앱의 안정적인 설정을 대부분 유지합니다 ----- */
+    "strict": true,
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+
+    /* ----- babel.config.js와 일치시키는 경로 설정입니다 ----- */
+    "baseUrl": ".",
+    "paths": {
+      "~screens/*": ["./src/screens/*"],
+      "~navigators/*": ["./src/navigators/*"],
+      "~components/*": ["./src/components/*"],
+      "~assets/*": ["./src/assets/*"],
+      "~utils/*": ["./src/utils/*"],
+      "~/*": ["./src/*"]
+    }
+  }
+}

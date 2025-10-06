@@ -1,0 +1,97 @@
+# Podfile for CodiPop - based on a stable production environment
+
+require Pod::Executable.execute_command('node', ['-p',
+  'require.resolve(
+    "react-native/scripts/react_native_pods.rb",
+    {paths: [process.argv[1]]},
+  )', __dir__]).strip
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+# react-native-permissions 헬퍼 스크립트 추가
+require_relative '../node_modules/react-native-permissions/scripts/setup'
+
+# 요청하신 대로 iOS 버전을 15.4로 설정
+platform :ios, '15.4'
+prepare_react_native_project!
+
+# Kachi 앱에 필요한 권한들 미리 설정
+setup_permissions([
+  'Camera',
+  'MediaLibrary',
+  'PhotoLibrary',
+  'PhotoLibraryAddOnly',
+  'Notifications',
+  'LocationAccuracy',
+  'LocationAlways',
+  'LocationWhenInUse',
+  'AppTrackingTransparency'
+])
+
+# Firebase 등 Swift 기반 라이브러리의 안정적인 사용을 위해 static frameworks 사용
+use_frameworks! :linkage => :static
+
+target 'CodiPop' do
+  config = use_native_modules!
+  # Firebase를 static framework으로 사용하도록 설정
+  $RNFirebaseAsStaticFramework = true
+  flags = get_default_flags()
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :hermes_enabled => flags[:hermes_enabled],
+    :fabric_enabled => flags[:fabric_enabled],
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  target 'CodiPopTests' do
+    inherit! :complete
+  end
+  
+  # Firebase 관련 Pod 명시
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'FirebaseCoreExtension', :modular_headers => true
+  pod 'Firebase/Messaging', :modular_headers => true
+  
+  # 기존 앱의 안정적인 설정을 대부분 가져온 post_install hook
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false
+    )
+  
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_config|
+        # M1/M2/M3 등 Apple Silicon Mac에서 시뮬레이터 빌드 오류 방지
+        build_config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = "arm64"
+        # Bitcode 설정 비활성화 (오류 방지)
+        build_config.build_settings['ENABLE_BITCODE'] = 'NO'
+      end
+  
+      # Firebase와 관련된 BoringSSL 플래그 최적화
+      if target.name == 'BoringSSL-GRPC'
+        target.build_configurations.each do |build_config|
+          essential_flags = ["-DOPENSSL_NO_ASM", "-w", "-DBORINGSSL_PREFIX=GRPC", "-fno-objc-arc"]
+          ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS'].each do |flags_key|
+            current_flags = build_config.build_settings[flags_key]
+            new_flags_array = []
+            if current_flags.is_a?(String)
+              new_flags_array = current_flags.split(' ').reject { |f| f.start_with?('-G') || f == '-GCC_WARN_INHIBIT_ALL_WARNINGS' }
+            elsif current_flags.is_a?(Array)
+              new_flags_array = current_flags.reject { |f| f.start_with?('-G') || f == '-GCC_WARN_INHIBIT_ALL_WARNINGS' }
+            end
+            build_config.build_settings[flags_key] = (new_flags_array + essential_flags).uniq.join(' ')
+          end
+        end
+      end
+  
+      # Hermes Bitcode 비활성화
+      if target.name == 'hermes-engine'
+        target.build_configurations.each do |config|
+          config.build_settings['ENABLE_BITCODE'] = 'NO'
+        end
+      end
+    end
+  end
+end

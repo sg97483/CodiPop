@@ -1,0 +1,50 @@
+{
+  "translation": {
+    "appName": "CodiPOP",
+    "welcomeTitle": "Let's Get Started!",
+    "welcomeSubtitle": "Your K-Buddy for travel in Korea",
+    "googleLogin": "Continue with Google",
+    "appleLogin": "Continue with Apple",
+
+    "onboarding1Title": "Don't Just Try It, POP It!",
+    "onboarding1Description": "Just grab a photo of an outfit and one of yourself. CodiPOP creates a perfect virtual try-on, no fitting room required.",
+    "onboarding2Title": "Meet Nano Banana, Your AI Stylist",
+    "onboarding2Description": "Our smart AI, 'Nano Banana,' shows you wearing any outfit in seconds. It's shopping magic, right on your phone.",
+    "onboarding3Title": "Discover Your Perfect Style",
+    "onboarding3Description": "No more shopping mistakes. Explore endless styles and buy the outfits that truly suit you with total confidence.",
+    
+    "skip": "Skip",
+    "getStarted": "Get Started",
+    
+    "skip": "Skip",
+    "continueButton": "Continue",
+    "getStarted": "Get Started",
+
+    "fandomPreferencesTitle": "My Fandom Preferences",
+    "fandomPreferencesSubtitle": "Tell us your favorite artists or interests, and we'll tailor recommendations to your style.",
+    "searchFandomPlaceholder": "Search favorite artists or interests",
+    "selectionLimitExceededTitle": "Selection Limit",
+    "selectionLimitExceededMessage": "You can select up to {{max}} tags.",
+    "pleaseSelectTagsTitle": "Select Preferences",
+    "pleaseSelectTagsMessage": "Please select at least one fandom preference to continue.",
+    "personalTouchTitle": "Add a personal touch",
+    "personalTouchSubtitle": "To enhance your travel journey, we'd love to know more about you.",
+    "fullNameLabel": "Full Name",
+    "fullNamePlaceholder": "Enter your full name",
+    "emailLabel": "Email",
+    "emailPlaceholder": "Enter your email address",
+    "fillAllFieldsTitle": "Incomplete Information",
+    "fillAllFieldsMessage": "Please fill in all required fields to continue.",
+    "signUpSuccessTitle": "You're all set!",
+    "signUpSuccessSubtitle": "Congratulations! You're now part of the Kachi community. Your personalized travel experiences await.",
+    "exploreButton": "Explore Destinations",
+    "tabHome": "Home",
+    "tabSaved": "Saved",
+    "tabMyTrips": "My Trips",
+    "tabSettings": "Settings",
+    "searchHomePlaceholder": "Search K-culture spots, friends, or interests",
+    "popularSpotsTitle": "Popular K-Culture Spots",
+    "latestArticlesTitle": "Latest Fandom Articles",
+    "viewAll": "View All"
+  }
+}
