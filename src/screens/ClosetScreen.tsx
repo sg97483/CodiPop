@@ -37,6 +37,9 @@ const ClosetScreen = () => {
   const [imageLoading, setImageLoading] = useState<{[key: string]: boolean}>(
     {},
   );
+  const [imageError, setImageError] = useState<{[key: string]: boolean}>(
+    {},
+  );
 
   const [activeCategory, setActiveCategory] = useState('ALL');
 
@@ -72,6 +75,7 @@ const ClosetScreen = () => {
             console.log('ClosetScreen 아이템 설정 완료:', items.length, '개');
             setClosetItems(items);
             setImageLoading({});
+            setImageError({});
             setLoading(false);
             
             // 잘못된 로컬 파일 경로를 가진 아이템들 정리
@@ -232,8 +236,9 @@ const ClosetScreen = () => {
                     resizeMode="cover"
                     // ✅ 로딩 시작 시 상태 업데이트
                     onLoadStart={() => {
-                      console.log('이미지 로딩 시작:', item.id);
+                      console.log('이미지 로딩 시작:', item.id, item.imageUrl);
                       setImageLoading(prev => ({...prev, [item.id]: true}));
+                      setImageError(prev => ({...prev, [item.id]: false}));
                     }}
                     // ✅ 로딩 완료 시 상태 업데이트
                     onLoadEnd={() => {
@@ -244,6 +249,7 @@ const ClosetScreen = () => {
                     onError={(error) => {
                       console.error('이미지 로딩 에러:', item.id, error.nativeEvent.error);
                       setImageLoading(prev => ({...prev, [item.id]: false}));
+                      setImageError(prev => ({...prev, [item.id]: true}));
                     }}
                   />
                   {/* ✅ 로딩 중일 때 ActivityIndicator 표시 */}
@@ -254,8 +260,8 @@ const ClosetScreen = () => {
                       color="#6A0DAD"
                     />
                   )}
-                  {/* ✅ 이미지 로드 실패 시 플레이스홀더 */}
-                  {!imageLoading[item.id] && (
+                  {/* ✅ 이미지 로드 실패 시에만 플레이스홀더 표시 */}
+                  {!imageLoading[item.id] && imageError[item.id] && (
                     <View style={styles.imagePlaceholder}>
                       <Text style={styles.imagePlaceholderText}>📷</Text>
                     </View>
