@@ -42,7 +42,8 @@ const ClosetScreen = () => {
 
   useEffect(() => {
     if (isFocused && user) {
-      console.log('📱 옷장 데이터 로딩 시작 - 사용자:', user.uid);
+      console.log('ClosetScreen 데이터 로딩 시작 - 사용자:', user.uid);
+      setLoading(true);
       
       const subscriber = firestore()
         .collection('users')
@@ -51,18 +52,16 @@ const ClosetScreen = () => {
         .orderBy('createdAt', 'desc')
         .onSnapshot(
           querySnapshot => {
-            console.log('📊 Firestore 스냅샷 업데이트:', querySnapshot.size, '개 아이템');
-            
+            console.log('ClosetScreen Firestore 업데이트:', querySnapshot.size, '개 아이템');
             const items: ClosetItem[] = [];
             querySnapshot.forEach(documentSnapshot => {
               const data = documentSnapshot.data();
-              console.log('📄 아이템 데이터:', {
+              console.log('ClosetScreen 아이템 데이터:', {
                 id: documentSnapshot.id,
                 imageUrl: data.imageUrl,
                 category: data.category,
                 createdAt: data.createdAt
               });
-              
               items.push({
                 id: documentSnapshot.id,
                 imageUrl: data.imageUrl,
@@ -70,13 +69,13 @@ const ClosetScreen = () => {
               });
             });
             
-            console.log('✅ 옷장 아이템 업데이트 완료:', items.length, '개');
+            console.log('ClosetScreen 아이템 설정 완료:', items.length, '개');
             setClosetItems(items);
             setImageLoading({});
             setLoading(false);
           },
           error => {
-            console.error('❌ Firestore 스냅샷 오류:', error);
+            console.error('ClosetScreen Firestore 오류:', error);
             Alert.alert('오류', '옷장 데이터를 불러오는 중 문제가 발생했습니다.');
             setLoading(false);
           }
@@ -110,8 +109,6 @@ const ClosetScreen = () => {
 
           try {
             // 로딩 상태 표시 (선택사항)
-            console.log('🗑️ 아이템 삭제 시작:', itemId);
-            
             await firestore()
               .collection('users')
               .doc(user.uid)
@@ -119,13 +116,11 @@ const ClosetScreen = () => {
               .doc(itemId)
               .delete();
             
-            console.log('✅ 아이템이 성공적으로 삭제되었습니다!');
-            
             // 성공 메시지 (선택사항)
             // Toast.show({type: 'success', text1: '아이템이 삭제되었습니다!'});
             
           } catch (error: any) {
-            console.error('❌ 삭제 중 오류 발생:', error);
+            console.error('삭제 중 오류 발생:', error);
             
             // 더 구체적인 에러 메시지
             let errorMessage = '삭제 중 문제가 발생했습니다.';
@@ -186,32 +181,53 @@ const ClosetScreen = () => {
           data={displayedItems}
           keyExtractor={item => item.id}
           numColumns={2}
-          renderItem={({item}) => (
-            <View style={styles.gridItem}>
-              <TouchableOpacity
-                style={styles.imagePressable}
-                onPress={() => handleItemPress(item.imageUrl)}>
-                <Image
-                  source={{uri: item.imageUrl}}
-                  style={styles.closetImage}
-                  // ✅ 로딩 시작 시 상태 업데이트
-                  onLoadStart={() =>
-                    setImageLoading(prev => ({...prev, [item.id]: true}))
-                  }
-                  // ✅ 로딩 완료 시 상태 업데이트
-                  onLoadEnd={() =>
-                    setImageLoading(prev => ({...prev, [item.id]: false}))
-                  }
-                />
-                {/* ✅ 로딩 중일 때 ActivityIndicator 표시 */}
-                {imageLoading[item.id] && (
-                  <ActivityIndicator
-                    style={StyleSheet.absoluteFill} // 이미지를 완전히 덮도록 설정
-                    size="small"
-                    color="#6A0DAD"
+          renderItem={({item}) => {
+            console.log('ClosetScreen 렌더링:', {
+              id: item.id,
+              imageUrl: item.imageUrl,
+              category: item.category
+            });
+            
+            return (
+              <View style={styles.gridItem}>
+                <TouchableOpacity
+                  style={styles.imagePressable}
+                  onPress={() => handleItemPress(item.imageUrl)}>
+                  <Image
+                    source={{uri: item.imageUrl}}
+                    style={styles.closetImage}
+                    resizeMode="cover"
+                    // ✅ 로딩 시작 시 상태 업데이트
+                    onLoadStart={() => {
+                      console.log('이미지 로딩 시작:', item.id);
+                      setImageLoading(prev => ({...prev, [item.id]: true}));
+                    }}
+                    // ✅ 로딩 완료 시 상태 업데이트
+                    onLoadEnd={() => {
+                      console.log('이미지 로딩 완료:', item.id);
+                      setImageLoading(prev => ({...prev, [item.id]: false}));
+                    }}
+                    // ✅ 에러 처리 추가
+                    onError={(error) => {
+                      console.error('이미지 로딩 에러:', item.id, error.nativeEvent.error);
+                      setImageLoading(prev => ({...prev, [item.id]: false}));
+                    }}
                   />
-                )}
-              </TouchableOpacity>
+                  {/* ✅ 로딩 중일 때 ActivityIndicator 표시 */}
+                  {imageLoading[item.id] && (
+                    <ActivityIndicator
+                      style={StyleSheet.absoluteFill} // 이미지를 완전히 덮도록 설정
+                      size="small"
+                      color="#6A0DAD"
+                    />
+                  )}
+                  {/* ✅ 이미지 로드 실패 시 플레이스홀더 */}
+                  {!imageLoading[item.id] && (
+                    <View style={styles.imagePlaceholder}>
+                      <Text style={styles.imagePlaceholderText}>📷</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteButton}
                 onPress={() => handleDeleteItem(item.id)}>
@@ -300,6 +316,21 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 16,
+  },
+  imagePlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePlaceholderText: {
+    fontSize: 24,
+    color: '#999999',
   },
   deleteButton: {
     position: 'absolute',

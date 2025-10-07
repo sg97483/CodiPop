@@ -1,6 +1,7 @@
 // App.tsx (최종 수정 버전)
 
 import './src/i18n';
+import './src/utils/logger'; // Firebase warning 필터링
 import React, {useState, useEffect} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
