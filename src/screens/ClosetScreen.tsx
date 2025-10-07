@@ -73,6 +73,11 @@ const ClosetScreen = () => {
             setClosetItems(items);
             setImageLoading({});
             setLoading(false);
+            
+            // 잘못된 로컬 파일 경로를 가진 아이템들 정리
+            setTimeout(() => {
+              cleanupInvalidItems();
+            }, 1000);
           },
           error => {
             console.error('ClosetScreen Firestore 오류:', error);
@@ -95,6 +100,34 @@ const ClosetScreen = () => {
     navigation.navigate('VirtualFitting', {clothingUrl: imageUrl});
   };
 
+
+  // 잘못된 로컬 파일 경로를 가진 아이템들을 정리하는 함수
+  const cleanupInvalidItems = async () => {
+    if (!user) return;
+    
+    const invalidItems = closetItems.filter(item => 
+      item.imageUrl.startsWith('file://') || 
+      item.imageUrl.includes('/cache/')
+    );
+    
+    if (invalidItems.length > 0) {
+      console.log('잘못된 아이템 정리:', invalidItems.length, '개');
+      
+      for (const item of invalidItems) {
+        try {
+          await firestore()
+            .collection('users')
+            .doc(user.uid)
+            .collection('closet')
+            .doc(item.id)
+            .delete();
+          console.log('아이템 삭제 완료:', item.id);
+        } catch (error) {
+          console.error('아이템 삭제 실패:', item.id, error);
+        }
+      }
+    }
+  };
 
   const handleDeleteItem = (itemId: string) => {
     Alert.alert('삭제 확인', '정말로 이 아이템을 옷장에서 삭제하시겠습니까?', [

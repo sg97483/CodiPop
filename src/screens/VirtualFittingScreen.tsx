@@ -25,6 +25,7 @@ import {
 import {launchImageLibrary} from 'react-native-image-picker';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import storage from '@react-native-firebase/storage';
 import Toast from 'react-native-toast-message';
 import {CameraRoll} from '@react-native-camera-roll/camera-roll';
 import RNFS from 'react-native-fs';
@@ -109,25 +110,48 @@ const VirtualFittingScreen = () => {
     }
   };
 
+  // 이미지를 Firebase Storage에 업로드하는 함수
+  const uploadImageToStorage = async (localImageUri: string, folder: string): Promise<string> => {
+    if (!user) throw new Error('사용자가 로그인되지 않았습니다.');
+    
+    const filename = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+    const reference = storage().ref(`users/${user.uid}/${folder}/${filename}`);
+    
+    try {
+      await reference.putFile(localImageUri);
+      const downloadUrl = await reference.getDownloadURL();
+      return downloadUrl;
+    } catch (error) {
+      console.error('이미지 업로드 실패:', error);
+      throw error;
+    }
+  };
+
   // 옷장에 아이템을 저장하는 함수
   const handleSaveToCloset = async (imageUrl: string, category: string) => {
-    // ✅ category 파라미터 추가
     if (!imageUrl || !user) {
       return;
     }
+    
     try {
+      // Firebase Storage에 이미지 업로드
+      const downloadUrl = await uploadImageToStorage(imageUrl, 'closet');
+      
+      // Firestore에 메타데이터 저장
       await firestore()
         .collection('users')
         .doc(user.uid)
         .collection('closet')
         .add({
-          imageUrl: imageUrl,
-          category: category, // ✅ category 필드 추가
+          imageUrl: downloadUrl, // Firebase Storage URL 사용
+          category: category,
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
+      
       Toast.show({type: 'success', text1: '옷장에 추가되었습니다!'});
-      setSelectedClothingImage(imageUrl); // 저장 후 바로 선택 상태로
+      setSelectedClothingImage(downloadUrl); // 저장 후 바로 선택 상태로
     } catch (error) {
+      console.error('옷장 저장 실패:', error);
       Toast.show({
         type: 'error',
         text1: '오류',
