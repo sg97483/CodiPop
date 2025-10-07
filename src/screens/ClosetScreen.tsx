@@ -96,20 +96,6 @@ const ClosetScreen = () => {
     navigation.navigate('VirtualFitting', {clothingUrl: imageUrl});
   };
 
-  // 디버깅을 위한 함수들
-  const handleDebugInfo = () => {
-    console.log('🔍 디버그 정보:');
-    console.log('- 현재 사용자:', user?.uid);
-    console.log('- 옷장 아이템 수:', closetItems.length);
-    console.log('- 활성 카테고리:', activeCategory);
-    console.log('- 표시된 아이템 수:', displayedItems.length);
-    console.log('- 로딩 상태:', loading);
-    
-    Alert.alert(
-      '디버그 정보', 
-      `사용자: ${user?.uid || '없음'}\n옷장 아이템: ${closetItems.length}개\n표시된 아이템: ${displayedItems.length}개\n로딩: ${loading ? '중' : '완료'}`
-    );
-  };
 
   const handleDeleteItem = (itemId: string) => {
     Alert.alert('삭제 확인', '정말로 이 아이템을 옷장에서 삭제하시겠습니까?', [
@@ -162,9 +148,6 @@ const ClosetScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.headerContainer}>
           <Text style={styles.headerTitle}>내 옷장</Text>
-          <TouchableOpacity onPress={handleDebugInfo} style={styles.debugButton}>
-            <Text style={styles.debugButtonText}>🔍</Text>
-          </TouchableOpacity>
         </View>
         <ActivityIndicator style={{flex: 1}} size="large" />
       </SafeAreaView>
@@ -175,9 +158,6 @@ const ClosetScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>내 옷장</Text>
-        <TouchableOpacity onPress={handleDebugInfo} style={styles.debugButton}>
-          <Text style={styles.debugButtonText}>🔍</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.categoryContainer}>
@@ -272,8 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 20,
@@ -281,20 +260,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    flex: 1,
     textAlign: 'center',
-  },
-  debugButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#6A0DAD',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  debugButtonText: {
-    fontSize: 18,
-    color: '#FFFFFF',
   },
   categoryContainer: {
     paddingVertical: 10,

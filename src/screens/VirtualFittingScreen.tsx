@@ -405,7 +405,7 @@ const VirtualFittingScreen = () => {
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#FFFFFF'},
   topContainer: {
-    flex: 0.65,
+    flex: 0.7,
     backgroundColor: '#F0F0F0',
     justifyContent: 'center',
     alignItems: 'center',
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   changePersonText: {color: 'white', fontWeight: 'bold'},
-  bottomContainer: {flex: 0.35, borderTopWidth: 1, borderTopColor: '#E0E0E0'},
+  bottomContainer: {flex: 0.3, borderTopWidth: 1, borderTopColor: '#E0E0E0'},
   categoryListContainer: {paddingTop: 10},
   clothingListContainer: {flex: 1},
   categoryText: {
