@@ -234,7 +234,8 @@ const ClosetScreen = () => {
                 <Text style={styles.deleteButtonText}>🗑️</Text>
               </TouchableOpacity>
             </View>
-          )}
+            );
+          }}
           contentContainerStyle={styles.gridContainer}
           // 만약 필터링 결과가 없을 때를 대비한 처리
           ListEmptyComponent={
