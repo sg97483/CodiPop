@@ -14,8 +14,18 @@ import {
   Platform,
   PermissionsAndroid,
   Linking,
-  Animated,
+  ScrollView,
+  Animated as RNAnimated,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  interpolate,
+  Easing,
+} from 'react-native-reanimated';
 import {
   useNavigation,
   useIsFocused,
@@ -32,6 +42,90 @@ import RNFS from 'react-native-fs';
 import {useActionSheet} from '@expo/react-native-action-sheet';
 
 const CATEGORIES = ['내 옷장', 'ALL', 'TOP', 'PANTS', 'SKIRT', 'DRESS', 'ACC'];
+const MAX_CLOTHING_SELECTION = 3; // 최대 옷 선택 개수
+
+// 탄산 거품 애니메이션 컴포넌트
+const BubbleAnimation = () => {
+  const bubbles = Array.from({length: 16}, (_, i) => ({
+    id: i,
+    translateY: useSharedValue(0),
+    opacity: useSharedValue(0),
+    scale: useSharedValue(0.5),
+  }));
+
+  useEffect(() => {
+    const startAnimation = () => {
+      bubbles.forEach((bubble, index) => {
+        const delay = index * 150; // 각 거품마다 150ms씩 지연 (더 빠르게)
+        
+        setTimeout(() => {
+          // 무한 반복 애니메이션
+          bubble.translateY.value = withRepeat(
+            withTiming(-300, {
+              duration: 2000,
+              easing: Easing.out(Easing.cubic),
+            }),
+            -1,
+            false
+          );
+          
+          bubble.opacity.value = withRepeat(
+            withSequence(
+              withTiming(1, {duration: 300}),
+              withTiming(0, {duration: 1700})
+            ),
+            -1,
+            false
+          );
+          
+          bubble.scale.value = withRepeat(
+            withSequence(
+              withTiming(1, {duration: 300}),
+              withTiming(0.8, {duration: 1700})
+            ),
+            -1,
+            false
+          );
+        }, delay);
+      });
+    };
+
+    startAnimation();
+    
+    // 3초마다 새로운 애니메이션 사이클 시작
+    const interval = setInterval(startAnimation, 3000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View style={styles.bubbleContainer}>
+      {bubbles.map((bubble, index) => {
+        const animatedStyle = useAnimatedStyle(() => ({
+          transform: [
+            {translateY: bubble.translateY.value},
+            {scale: bubble.scale.value},
+          ],
+          opacity: bubble.opacity.value,
+        }));
+
+        return (
+          <Animated.View
+            key={bubble.id}
+            style={[
+              styles.bubble,
+              {
+                left: 15 + (index % 5) * 70, // 5열로 배치
+                bottom: 40 + (index % 3) * 25, // 3행으로 배치
+              },
+              animatedStyle,
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+};
 
 // ✅ ClosetItem 타입을 파일 상단에 정의하여 재사용합니다.
 interface ClosetItem {
@@ -54,11 +148,10 @@ const VirtualFittingScreen = () => {
   const [closetItems, setClosetItems] = useState<ClosetItem[]>([]);
   const [activeCategory, setActiveCategory] = useState('내 옷장');
   const [loadingCloset, setLoadingCloset] = useState(true);
-  const [selectedClothingImage, setSelectedClothingImage] = useState<
-    string | null
-  >(null);
+  const [selectedClothingImages, setSelectedClothingImages] = useState<string[]>([]);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new RNAnimated.Value(0)).current;
+  const slideUpAnim = useRef(new RNAnimated.Value(0)).current; // 하단 영역 슬라이드 업 애니메이션
 
   const [imageLoading, setImageLoading] = useState<{[key: string]: boolean}>(
     {},
@@ -67,7 +160,7 @@ const VirtualFittingScreen = () => {
   // 옷장에서 아이템을 선택했을 때 clothingImage 자동 설정
   useEffect(() => {
     if (isFocused && route.params?.clothingUrl) {
-      setSelectedClothingImage(route.params.clothingUrl);
+      setSelectedClothingImages([route.params.clothingUrl]);
       navigation.setParams({clothingUrl: undefined});
     }
   }, [isFocused, route.params?.clothingUrl, navigation]);
@@ -107,6 +200,12 @@ const VirtualFittingScreen = () => {
     const result = await launchImageLibrary({mediaType: 'photo'});
     if (result.assets && result.assets[0].uri) {
       setPersonImage(result.assets[0].uri);
+      // 사람 이미지 선택 시 하단 영역이 위로 올라가는 애니메이션
+      RNAnimated.timing(slideUpAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     }
   };
 
@@ -149,7 +248,7 @@ const VirtualFittingScreen = () => {
         });
       
       Toast.show({type: 'success', text1: '옷장에 추가되었습니다!'});
-      setSelectedClothingImage(downloadUrl); // 저장 후 바로 선택 상태로
+      setSelectedClothingImages([downloadUrl]); // 저장 후 바로 선택 상태로
     } catch (error) {
       console.error('옷장 저장 실패:', error);
       Toast.show({
@@ -183,7 +282,7 @@ const VirtualFittingScreen = () => {
           ) {
             const category = options[selectedIndex];
             handleSaveToCloset(newClothingUrl, category);
-            setSelectedClothingImage(newClothingUrl);
+            setSelectedClothingImages([newClothingUrl]);
           }
         },
       );
@@ -192,7 +291,7 @@ const VirtualFittingScreen = () => {
 
   // '피팅 시작' 버튼을 눌렀을 때 실행될 함수
   const handleTryOn = async () => {
-    if (!personImage || !selectedClothingImage) {
+    if (!personImage || selectedClothingImages.length === 0) {
       Alert.alert('알림', '먼저 사람과 의류 이미지를 모두 선택해주세요.');
       return;
     }
@@ -205,11 +304,18 @@ const VirtualFittingScreen = () => {
       name: 'person.jpg',
       type: 'image/jpeg',
     });
-    formData.append('clothing', {
-      uri: selectedClothingImage,
-      name: 'clothing.jpg',
-      type: 'image/jpeg',
+    
+    // 모든 선택된 옷 이미지를 전송 (서버에서 다중 옷 이미지 지원)
+    selectedClothingImages.forEach((clothingUrl, index) => {
+      formData.append('clothing', {
+        uri: clothingUrl,
+        name: `clothing_${index}.jpg`,
+        type: 'image/jpeg',
+      });
     });
+    
+    // 옷 개수 정보도 함께 전송
+    formData.append('clothing_count', selectedClothingImages.length.toString());
 
     try {
       const response = await fetch(
@@ -274,15 +380,31 @@ const VirtualFittingScreen = () => {
     }
   };
 
-  // 옷을 '선택'만 하는 함수
+  // 옷을 '선택/해제'하는 함수 (다중 선택 지원, 최대 3개 제한)
   const handleItemSelect = (clothingUrl: string) => {
-    setSelectedClothingImage(clothingUrl);
+    setSelectedClothingImages(prev => {
+      if (prev.includes(clothingUrl)) {
+        // 이미 선택된 경우 제거
+        return prev.filter(url => url !== clothingUrl);
+      } else {
+        // 선택되지 않은 경우 추가 (최대 3개 제한)
+        if (prev.length >= MAX_CLOTHING_SELECTION) {
+          Toast.show({
+            type: 'info',
+            text1: '선택 제한',
+            text2: `최대 ${MAX_CLOTHING_SELECTION}개의 옷만 선택할 수 있습니다.`,
+          });
+          return prev;
+        }
+        return [...prev, clothingUrl];
+      }
+    });
   };
 
   // 애니메이션을 위한 useEffect
   useEffect(() => {
     if (resultImage) {
-      Animated.timing(fadeAnim, {
+      RNAnimated.timing(fadeAnim, {
         toValue: 1,
         duration: 500,
         useNativeDriver: true,
@@ -292,27 +414,60 @@ const VirtualFittingScreen = () => {
     }
   }, [resultImage, fadeAnim]);
 
+  // 컴포넌트 마운트 시 하단 영역 애니메이션 초기화
+  useEffect(() => {
+    // 사람 이미지가 이미 선택되어 있다면 애니메이션을 완료 상태로 설정
+    if (personImage) {
+      slideUpAnim.setValue(0.7); // 옷 선택 전에는 중간 정도 위치로 설정
+    } else {
+      slideUpAnim.setValue(0.3); // 사람 이미지가 없어도 하단 영역이 보이도록 설정
+    }
+  }, [personImage, slideUpAnim]);
+
+  // 옷 선택 시에도 슬라이드 업 애니메이션 실행
+  useEffect(() => {
+    if (personImage) {
+      // 사람 이미지가 선택된 상태에서 옷 선택 상태에 따라 애니메이션 실행
+      if (selectedClothingImages.length > 0) {
+        // 옷이 선택되면 슬라이드 업
+        RNAnimated.timing(slideUpAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      } else {
+        // 옷이 모두 해제되면 슬라이드 다운
+        RNAnimated.timing(slideUpAnim, {
+          toValue: 0.5, // 완전히 내리지 않고 중간 정도로
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+    }
+  }, [selectedClothingImages.length, personImage, slideUpAnim]);
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.topContainer}>
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.topContainer}>
         {isProcessing ? (
           <View style={styles.processingContainer}>
-            <ActivityIndicator size="large" color="#6A0DAD" />
-            <Text style={styles.processingText}>이미지 합성 중...</Text>
+            <BubbleAnimation />
+            <Text style={styles.processingText}>최신 AI 기술로 코디 진행 중...</Text>
+            <Text style={styles.processingSubText}>Gemini 2.5 Flash로 완벽한 가상 피팅</Text>
           </View>
         ) : resultImage ? (
           <View style={styles.resultContainer}>
             <TouchableOpacity onPress={handleDownloadImage}>
-              <Animated.Image
+              <RNAnimated.Image
                 source={{uri: resultImage}}
                 style={[styles.resultImage, {opacity: fadeAnim}]}
                 resizeMode="contain"
               />
             </TouchableOpacity>
-            <View style={styles.resultOverlay}>
-              <Text style={styles.resultSuccessText}>✅ 피팅 완료!</Text>
-              <Text style={styles.resultSubText}>탭하여 다운로드</Text>
-            </View>
           </View>
         ) : personImage ? (
           <Image
@@ -338,18 +493,57 @@ const VirtualFittingScreen = () => {
           <TouchableOpacity style={styles.newTryOnButton} onPress={() => {
             setResultImage(null);
             setPersonImage(null);
-            setSelectedClothingImage(null);
+            setSelectedClothingImages([]);
+            // 새 피팅 시작 시 애니메이션 초기화
+            slideUpAnim.setValue(0);
           }}>
             <Text style={styles.newTryOnButtonText}>새 피팅 시작 🔄</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.tryOnButton} onPress={handleTryOn}>
-            <Text style={styles.tryOnButtonText}>피팅 시작 🚀</Text>
+            <Text style={styles.tryOnButtonText}>
+              피팅 시작 🚀 ({selectedClothingImages.length}개 선택)
+            </Text>
           </TouchableOpacity>
         )}
       </View>
 
       <View style={styles.bottomContainer}>
+        {/* 선택된 아이템들을 표시하는 섹션 */}
+        {selectedClothingImages.length > 0 && (
+          <View style={styles.selectedItemsContainer}>
+            <View style={styles.selectedItemsHeader}>
+              <Text style={styles.selectedItemsTitle}>
+                선택된 아이템 ({selectedClothingImages.length}/{MAX_CLOTHING_SELECTION})
+              </Text>
+              <Text style={styles.selectionLimitText}>
+                최대 {MAX_CLOTHING_SELECTION}개까지 선택 가능
+              </Text>
+            </View>
+            <FlatList
+              data={selectedClothingImages}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item, index) => `${item}_${index}`}
+              renderItem={({item, index}) => (
+                <View style={styles.selectedItemWrapper}>
+                  <Image
+                    source={{uri: item}}
+                    style={styles.selectedItemImage}
+                    resizeMode="cover"
+                  />
+                  <TouchableOpacity
+                    style={styles.removeItemButton}
+                    onPress={() => handleItemSelect(item)}>
+                    <Text style={styles.removeItemText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              contentContainerStyle={{paddingHorizontal: 10}}
+            />
+          </View>
+        )}
+        
         <View style={styles.categoryListContainer}>
           <FlatList
             data={CATEGORIES}
@@ -387,32 +581,50 @@ const VirtualFittingScreen = () => {
                   <Text style={styles.addClothingButtonText}>+</Text>
                 </TouchableOpacity>
               )}
-              renderItem={({item}) => (
-                <TouchableOpacity
-                  onPress={() => handleItemSelect(item.imageUrl)}>
-                  <Image
-                    source={{uri: item.imageUrl}}
+              renderItem={({item}) => {
+                const isSelected = selectedClothingImages.includes(item.imageUrl);
+                const canSelect = !isSelected && selectedClothingImages.length < MAX_CLOTHING_SELECTION;
+                
+                return (
+                  <TouchableOpacity
+                    onPress={() => handleItemSelect(item.imageUrl)}
                     style={[
-                      styles.clothingItem,
-                      selectedClothingImage === item.imageUrl &&
-                        styles.selectedClothingItem,
-                    ]}
+                      styles.clothingItemContainer,
+                      !canSelect && !isSelected && styles.disabledClothingItem,
+                    ]}>
+                    <Image
+                      source={{uri: item.imageUrl}}
+                      style={[
+                        styles.clothingItem,
+                        isSelected && styles.selectedClothingItem,
+                      ]}
                     onLoadStart={() =>
                       setImageLoading(prev => ({...prev, [item.id]: true}))
                     }
                     onLoadEnd={() =>
                       setImageLoading(prev => ({...prev, [item.id]: false}))
                     }
-                  />
-                  {imageLoading[item.id] && (
-                    <ActivityIndicator
-                      style={StyleSheet.absoluteFill}
-                      size="small"
-                      color="#6A0DAD"
                     />
-                  )}
-                </TouchableOpacity>
-              )}
+                    {imageLoading[item.id] && (
+                      <ActivityIndicator
+                        style={StyleSheet.absoluteFill}
+                        size="small"
+                        color="#6A0DAD"
+                      />
+                    )}
+                    {isSelected && (
+                      <View style={styles.selectedIndicator}>
+                        <Text style={styles.selectedIndicatorText}>✓</Text>
+                      </View>
+                    )}
+                    {!canSelect && !isSelected && (
+                      <View style={styles.disabledOverlay}>
+                        <Text style={styles.disabledText}>최대 3개</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
               contentContainerStyle={{
                 paddingLeft: 10,
                 paddingTop: 10,
@@ -422,14 +634,17 @@ const VirtualFittingScreen = () => {
           )}
         </View>
       </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#FFFFFF'},
+  scrollContainer: {flex: 1},
+  scrollContent: {flexGrow: 1},
   topContainer: {
-    flex: 0.7,
+    height: 400, // 고정 높이로 변경 (flex 대신)
     backgroundColor: '#F0F0F0',
     justifyContent: 'center',
     alignItems: 'center',
@@ -440,12 +655,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     height: '100%',
+    position: 'relative',
   },
   processingText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#6A0DAD',
     fontWeight: 'bold',
     marginTop: 16,
+    zIndex: 10,
+    textAlign: 'center',
+  },
+  processingSubText: {
+    fontSize: 14,
+    color: '#6A0DAD',
+    fontWeight: '500',
+    marginTop: 8,
+    zIndex: 10,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+  bubbleContainer: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bubble: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(106, 13, 173, 0.3)',
+    borderWidth: 2,
+    borderColor: 'rgba(106, 13, 173, 0.6)',
   },
   resultContainer: {
     width: '100%',
@@ -489,7 +732,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   changePersonText: {color: 'white', fontWeight: 'bold'},
-  bottomContainer: {flex: 0.3, borderTopWidth: 1, borderTopColor: '#E0E0E0'},
+  bottomContainer: {
+    minHeight: 300, // 최소 높이 설정 (flex 대신)
+    borderTopWidth: 1, 
+    borderTopColor: '#E0E0E0',
+    paddingBottom: 20, // 하단 패딩 추가
+  },
   categoryListContainer: {paddingTop: 10},
   clothingListContainer: {flex: 1},
   categoryText: {
@@ -550,6 +798,93 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   newTryOnButtonText: {color: 'white', fontWeight: 'bold', fontSize: 14},
+  selectedItemsContainer: {
+    backgroundColor: '#F8F8F8',
+    paddingVertical: 10,
+    paddingTop: 15, // 상단 패딩 증가로 삭제 버튼 공간 확보
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  selectedItemsHeader: {
+    paddingHorizontal: 15,
+    marginBottom: 8,
+  },
+  selectedItemsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  selectionLimitText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  selectedItemWrapper: {
+    position: 'relative',
+    marginRight: 10,
+    paddingTop: 5, // 상단 여백 추가로 삭제 버튼이 잘리지 않도록
+  },
+  selectedItemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#E0E0E0',
+  },
+  removeItemButton: {
+    position: 'absolute',
+    top: 0, // -5에서 0으로 변경하여 잘림 방지
+    right: -5,
+    backgroundColor: '#FF6B6B',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeItemText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  clothingItemContainer: {
+    position: 'relative',
+  },
+  disabledClothingItem: {
+    opacity: 0.5,
+  },
+  selectedIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: '#6A0DAD',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectedIndicatorText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  disabledOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  disabledText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
 });
 
 export default VirtualFittingScreen;
