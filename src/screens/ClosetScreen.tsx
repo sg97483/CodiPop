@@ -16,7 +16,8 @@ import {useNavigation, useIsFocused} from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
-const CATEGORIES = ['ALL', 'TOP', 'PANTS', 'SKIRT', 'DRESS', 'ACC'];
+const CATEGORIES = ['All', 'Tops', 'Bottoms', 'Shoes', 'Acc'];
+const MAX_CLOSET_ITEMS = 30; // 옷장 최대 아이템 개수
 
 type ClosetScreenNavigationProp = {
   navigate: (screen: 'VirtualFitting', params?: {clothingUrl: string}) => void;
@@ -41,7 +42,7 @@ const ClosetScreen = () => {
     {},
   );
 
-  const [activeCategory, setActiveCategory] = useState('ALL');
+  const [activeCategory, setActiveCategory] = useState('All');
 
   useEffect(() => {
     if (isFocused && user) {
@@ -94,7 +95,7 @@ const ClosetScreen = () => {
   }, [isFocused, user]);
 
   const displayedItems = useMemo(() => {
-    if (activeCategory === 'ALL') {
+    if (activeCategory === 'All') {
       return closetItems;
     }
     return closetItems.filter(item => item.category === activeCategory);
@@ -190,6 +191,9 @@ const ClosetScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>내 옷장</Text>
+        <Text style={styles.itemCountText}>
+          {closetItems.length}/{MAX_CLOSET_ITEMS}개
+        </Text>
       </View>
 
       <View style={styles.categoryContainer}>
@@ -311,11 +315,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingVertical: 15,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  itemCountText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
     textAlign: 'center',
   },
   categoryContainer: {

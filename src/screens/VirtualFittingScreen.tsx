@@ -17,6 +17,7 @@ import {
   ScrollView,
   Animated as RNAnimated,
 } from 'react-native';
+import {PanGestureHandler, State} from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -41,8 +42,9 @@ import {CameraRoll} from '@react-native-camera-roll/camera-roll';
 import RNFS from 'react-native-fs';
 import {useActionSheet} from '@expo/react-native-action-sheet';
 
-const CATEGORIES = ['내 옷장', 'ALL', 'TOP', 'PANTS', 'SKIRT', 'DRESS', 'ACC'];
-const MAX_CLOTHING_SELECTION = 3; // 최대 옷 선택 개수
+const CATEGORIES = ['All', 'Tops', 'Bottoms', 'Shoes', 'Acc'];
+const MAX_CLOTHING_SELECTION = 2; // 최대 옷 선택 개수
+const MAX_CLOSET_ITEMS = 30; // 옷장 최대 아이템 개수
 
 // 탄산 거품 애니메이션 컴포넌트
 const BubbleAnimation = () => {
@@ -146,12 +148,14 @@ const VirtualFittingScreen = () => {
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [closetItems, setClosetItems] = useState<ClosetItem[]>([]);
-  const [activeCategory, setActiveCategory] = useState('내 옷장');
+  const [activeCategory, setActiveCategory] = useState('All');
   const [loadingCloset, setLoadingCloset] = useState(true);
   const [selectedClothingImages, setSelectedClothingImages] = useState<string[]>([]);
+  const [isPanelExpanded, setIsPanelExpanded] = useState(false);
 
   const fadeAnim = useRef(new RNAnimated.Value(0)).current;
   const slideUpAnim = useRef(new RNAnimated.Value(0)).current; // 하단 영역 슬라이드 업 애니메이션
+  const panGestureRef = useRef<PanGestureHandler>(null);
 
   const [imageLoading, setImageLoading] = useState<{[key: string]: boolean}>(
     {},
@@ -188,10 +192,9 @@ const VirtualFittingScreen = () => {
 
   // 선택된 카테고리에 따라 보여줄 아이템 필터링
   const displayedItems = useMemo(() => {
-    if (activeCategory === 'ALL' || activeCategory === '내 옷장') {
+    if (activeCategory === 'All') {
       return closetItems;
     }
-    // ✅ 주석을 제거하여 필터링 로직을 활성화합니다.
     return closetItems.filter(item => item.category === activeCategory);
   }, [activeCategory, closetItems]);
 
@@ -233,6 +236,25 @@ const VirtualFittingScreen = () => {
     }
     
     try {
+      // 현재 옷장 아이템 개수 확인
+      const closetSnapshot = await firestore()
+        .collection('users')
+        .doc(user.uid)
+        .collection('closet')
+        .get();
+      
+      const currentItemCount = closetSnapshot.size;
+      
+      // 30개 제한 확인
+      if (currentItemCount >= MAX_CLOSET_ITEMS) {
+        Toast.show({
+          type: 'error',
+          text1: '옷장이 가득참',
+          text2: `최대 ${MAX_CLOSET_ITEMS}개의 아이템만 저장할 수 있습니다.`,
+        });
+        return;
+      }
+      
       // Firebase Storage에 이미지 업로드
       const downloadUrl = await uploadImageToStorage(imageUrl, 'closet');
       
@@ -266,8 +288,8 @@ const VirtualFittingScreen = () => {
       const newClothingUrl = result.assets[0].uri;
 
       // ✅ [수정] Alert를 ActionSheet로 변경
-      const options = ['TOP', 'PANTS', 'SKIRT', 'DRESS', 'ACC', '취소'];
-      const cancelButtonIndex = 5;
+      const options = ['Tops', 'Bottoms', 'Shoes', 'Acc', '취소'];
+      const cancelButtonIndex = 4;
 
       showActionSheetWithOptions(
         {
@@ -295,6 +317,15 @@ const VirtualFittingScreen = () => {
       Alert.alert('알림', '먼저 사람과 의류 이미지를 모두 선택해주세요.');
       return;
     }
+    
+    // 피팅 시작 시 내 옷장 패널 접기
+    setIsPanelExpanded(false);
+    RNAnimated.timing(slideUpAnim, {
+      toValue: 0.05,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    
     setIsProcessing(true);
     setResultImage(null);
 
@@ -332,6 +363,7 @@ const VirtualFittingScreen = () => {
         setResultImage(result.imageUrl);
         Toast.show({type: 'success', text1: '이미지 합성이 완료되었습니다.'});
         if (user) {
+          // 기존 recentResults에도 저장 (호환성 유지)
           firestore()
             .collection('users')
             .doc(user.uid)
@@ -339,6 +371,17 @@ const VirtualFittingScreen = () => {
             .add({
               imageUrl: result.imageUrl,
               createdAt: firestore.FieldValue.serverTimestamp(),
+            });
+          
+          // 새로운 Recent Codi 컬렉션에도 저장
+          firestore()
+            .collection('users')
+            .doc(user.uid)
+            .collection('recentCodi')
+            .add({
+              imageUrl: result.imageUrl,
+              createdAt: firestore.FieldValue.serverTimestamp(),
+              isLiked: false,
             });
         }
       } else {
@@ -416,13 +459,9 @@ const VirtualFittingScreen = () => {
 
   // 컴포넌트 마운트 시 하단 영역 애니메이션 초기화
   useEffect(() => {
-    // 사람 이미지가 이미 선택되어 있다면 애니메이션을 완료 상태로 설정
-    if (personImage) {
-      slideUpAnim.setValue(0.7); // 옷 선택 전에는 중간 정도 위치로 설정
-    } else {
-      slideUpAnim.setValue(0.3); // 사람 이미지가 없어도 하단 영역이 보이도록 설정
-    }
-  }, [personImage, slideUpAnim]);
+    // 초기에는 패널이 접힌 상태로 시작 (하단에 반투명 스크롤바만 보임)
+    slideUpAnim.setValue(0.05);
+  }, [slideUpAnim]);
 
   // 옷 선택 시에도 슬라이드 업 애니메이션 실행
   useEffect(() => {
@@ -430,6 +469,7 @@ const VirtualFittingScreen = () => {
       // 사람 이미지가 선택된 상태에서 옷 선택 상태에 따라 애니메이션 실행
       if (selectedClothingImages.length > 0) {
         // 옷이 선택되면 슬라이드 업
+        setIsPanelExpanded(true);
         RNAnimated.timing(slideUpAnim, {
           toValue: 1,
           duration: 300,
@@ -437,8 +477,9 @@ const VirtualFittingScreen = () => {
         }).start();
       } else {
         // 옷이 모두 해제되면 슬라이드 다운
+        setIsPanelExpanded(false);
         RNAnimated.timing(slideUpAnim, {
-          toValue: 0.5, // 완전히 내리지 않고 중간 정도로
+          toValue: 0.05, // 완전히 내리지 않고 중간 정도로
           duration: 300,
           useNativeDriver: true,
         }).start();
@@ -446,34 +487,54 @@ const VirtualFittingScreen = () => {
     }
   }, [selectedClothingImages.length, personImage, slideUpAnim]);
 
+  // 드래그 핸들러
+  const onHandlerStateChange = (event: any) => {
+    if (event.nativeEvent.state === State.END) {
+      const {translationY, velocityY} = event.nativeEvent;
+      
+      // 드래그 방향과 속도에 따라 패널 상태 결정
+      if (translationY > 50 || velocityY > 500) {
+        // 아래로 드래그하면 패널 닫기
+        setIsPanelExpanded(false);
+        RNAnimated.timing(slideUpAnim, {
+          toValue: 0.05,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      } else if (translationY < -50 || velocityY < -500) {
+        // 위로 드래그하면 패널 열기
+        setIsPanelExpanded(true);
+        RNAnimated.timing(slideUpAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.topContainer}>
+      {/* 메인 이미지 영역 - 화면 전체를 차지 */}
+      <View style={styles.mainImageContainer}>
         {isProcessing ? (
           <View style={styles.processingContainer}>
             <BubbleAnimation />
             <Text style={styles.processingText}>최신 AI 기술로 코디 진행 중...</Text>
-            <Text style={styles.processingSubText}>Gemini 2.5 Flash로 완벽한 가상 피팅</Text>
           </View>
         ) : resultImage ? (
           <View style={styles.resultContainer}>
-            <TouchableOpacity onPress={handleDownloadImage}>
-              <RNAnimated.Image
-                source={{uri: resultImage}}
-                style={[styles.resultImage, {opacity: fadeAnim}]}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
+            <RNAnimated.Image
+              source={{uri: resultImage}}
+              style={[styles.mainImage, {opacity: fadeAnim}]}
+              resizeMode="cover"
+            />
           </View>
         ) : personImage ? (
           <Image
             source={{uri: personImage}}
-            style={styles.resultImage}
-            resizeMode="contain"
+            style={styles.mainImage}
+            resizeMode="cover"
           />
         ) : (
           <TouchableOpacity
@@ -484,21 +545,31 @@ const VirtualFittingScreen = () => {
             </Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={styles.changePersonButton}
-          onPress={handleSelectPerson}>
-          <Text style={styles.changePersonText}>👤 사람 변경</Text>
-        </TouchableOpacity>
-        {resultImage ? (
-          <TouchableOpacity style={styles.newTryOnButton} onPress={() => {
-            setResultImage(null);
-            setPersonImage(null);
-            setSelectedClothingImages([]);
-            // 새 피팅 시작 시 애니메이션 초기화
-            slideUpAnim.setValue(0);
-          }}>
-            <Text style={styles.newTryOnButtonText}>새 피팅 시작 🔄</Text>
+        
+        {/* 사람 변경 버튼 - 합성 결과가 아닐 때만 표시 */}
+        {!resultImage && (
+          <TouchableOpacity
+            style={styles.changePersonButton}
+            onPress={handleSelectPerson}>
+            <Text style={styles.changePersonText}>👤 사람 변경</Text>
           </TouchableOpacity>
+        )}
+
+        {/* 피팅 버튼들 */}
+        {resultImage ? (
+          <View style={styles.resultButtonContainer}>
+            <TouchableOpacity style={styles.newTryOnButtonLeft} onPress={() => {
+              setResultImage(null);
+              setPersonImage(null);
+              setSelectedClothingImages([]);
+              slideUpAnim.setValue(0);
+            }}>
+              <Text style={styles.newTryOnButtonText}>새 피팅 시작 🔄</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.downloadButton} onPress={handleDownloadImage}>
+              <Text style={styles.downloadButtonText}>📥 다운로드</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <TouchableOpacity style={styles.tryOnButton} onPress={handleTryOn}>
             <Text style={styles.tryOnButtonText}>
@@ -508,64 +579,58 @@ const VirtualFittingScreen = () => {
         )}
       </View>
 
-      <View style={styles.bottomContainer}>
-        {/* 선택된 아이템들을 표시하는 섹션 */}
-        {selectedClothingImages.length > 0 && (
-          <View style={styles.selectedItemsContainer}>
-            <View style={styles.selectedItemsHeader}>
-              <Text style={styles.selectedItemsTitle}>
-                선택된 아이템 ({selectedClothingImages.length}/{MAX_CLOTHING_SELECTION})
-              </Text>
-              <Text style={styles.selectionLimitText}>
-                최대 {MAX_CLOTHING_SELECTION}개까지 선택 가능
-              </Text>
-            </View>
+      {/* 하단 옷장 영역 - 드래그 가능한 패널 */}
+      <RNAnimated.View 
+        style={[
+          styles.closetPanel,
+          {
+            transform: [{
+              translateY: slideUpAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [300, 0], // 패널이 아래에서 위로 올라옴
+              })
+            }]
+          }
+        ]}
+      >
+        {/* 드래그 핸들 */}
+        <PanGestureHandler
+          ref={panGestureRef}
+          onHandlerStateChange={onHandlerStateChange}
+        >
+          <View style={styles.dragHandle}>
+            <View style={styles.dragIndicator} />
+            <Text style={styles.closetTitle}>내 옷장</Text>
+          </View>
+        </PanGestureHandler>
+
+        {/* 카테고리 네비게이션 - 조건부 렌더링 */}
+        {isPanelExpanded && (
+          <View style={styles.categoryContainer}>
             <FlatList
-              data={selectedClothingImages}
+              data={CATEGORIES}
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={(item, index) => `${item}_${index}`}
-              renderItem={({item, index}) => (
-                <View style={styles.selectedItemWrapper}>
-                  <Image
-                    source={{uri: item}}
-                    style={styles.selectedItemImage}
-                    resizeMode="cover"
-                  />
-                  <TouchableOpacity
-                    style={styles.removeItemButton}
-                    onPress={() => handleItemSelect(item)}>
-                    <Text style={styles.removeItemText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
+              keyExtractor={item => item}
+              renderItem={({item}) => (
+                <TouchableOpacity onPress={() => setActiveCategory(item)}>
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      activeCategory === item && styles.activeCategoryText,
+                    ]}>
+                    {item}
+                  </Text>
+                </TouchableOpacity>
               )}
-              contentContainerStyle={{paddingHorizontal: 10}}
+              contentContainerStyle={{paddingHorizontal: 20}}
             />
           </View>
         )}
-        
-        <View style={styles.categoryListContainer}>
-          <FlatList
-            data={CATEGORIES}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={item => item}
-            renderItem={({item}) => (
-              <TouchableOpacity onPress={() => setActiveCategory(item)}>
-                <Text
-                  style={[
-                    styles.categoryText,
-                    activeCategory === item && styles.activeCategoryText,
-                  ]}>
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            )}
-            contentContainerStyle={{paddingHorizontal: 20}}
-          />
-        </View>
 
-        <View style={styles.clothingListContainer}>
+        {/* 옷 아이템 리스트 - 조건부 렌더링 */}
+        {isPanelExpanded && (
+          <View style={styles.clothingListContainer}>
           {loadingCloset ? (
             <ActivityIndicator style={{marginTop: 20}} />
           ) : (
@@ -574,13 +639,25 @@ const VirtualFittingScreen = () => {
               horizontal
               showsHorizontalScrollIndicator={false}
               keyExtractor={item => item.id}
-              ListHeaderComponent={() => (
-                <TouchableOpacity
-                  style={styles.addClothingButton}
-                  onPress={handleSelectClothing}>
-                  <Text style={styles.addClothingButtonText}>+</Text>
-                </TouchableOpacity>
-              )}
+              ListHeaderComponent={() => {
+                const isClosetFull = closetItems.length >= MAX_CLOSET_ITEMS;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.addClothingButton,
+                      isClosetFull && styles.disabledAddClothingButton
+                    ]}
+                    onPress={isClosetFull ? undefined : handleSelectClothing}
+                    disabled={isClosetFull}>
+                    <Text style={[
+                      styles.addClothingButtonText,
+                      isClosetFull && styles.disabledAddClothingButtonText
+                    ]}>
+                      {isClosetFull ? '30/30' : '+'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
               renderItem={({item}) => {
                 const isSelected = selectedClothingImages.includes(item.imageUrl);
                 const canSelect = !isSelected && selectedClothingImages.length < MAX_CLOTHING_SELECTION;
@@ -598,12 +675,13 @@ const VirtualFittingScreen = () => {
                         styles.clothingItem,
                         isSelected && styles.selectedClothingItem,
                       ]}
-                    onLoadStart={() =>
-                      setImageLoading(prev => ({...prev, [item.id]: true}))
-                    }
-                    onLoadEnd={() =>
-                      setImageLoading(prev => ({...prev, [item.id]: false}))
-                    }
+                      resizeMode="cover"
+                      onLoadStart={() =>
+                        setImageLoading(prev => ({...prev, [item.id]: true}))
+                      }
+                      onLoadEnd={() =>
+                        setImageLoading(prev => ({...prev, [item.id]: false}))
+                      }
                     />
                     {imageLoading[item.id] && (
                       <ActivityIndicator
@@ -619,7 +697,7 @@ const VirtualFittingScreen = () => {
                     )}
                     {!canSelect && !isSelected && (
                       <View style={styles.disabledOverlay}>
-                        <Text style={styles.disabledText}>최대 3개</Text>
+                        <Text style={styles.disabledText}>최대 2개</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -627,28 +705,29 @@ const VirtualFittingScreen = () => {
               }}
               contentContainerStyle={{
                 paddingLeft: 10,
-                paddingTop: 10,
-                paddingBottom: 10,
               }}
             />
           )}
-        </View>
-      </View>
-      </ScrollView>
+          </View>
+        )}
+      </RNAnimated.View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#FFFFFF'},
-  scrollContainer: {flex: 1},
-  scrollContent: {flexGrow: 1},
-  topContainer: {
-    height: 400, // 고정 높이로 변경 (flex 대신)
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  // 메인 이미지 영역 - 화면 전체를 차지
+  mainImageContainer: {
+    flex: 1,
     position: 'relative',
+  },
+  mainImage: {
+    width: '100%',
+    height: '100%',
   },
   processingContainer: {
     justifyContent: 'center',
@@ -664,15 +743,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     zIndex: 10,
     textAlign: 'center',
-  },
-  processingSubText: {
-    fontSize: 14,
-    color: '#6A0DAD',
-    fontWeight: '500',
-    marginTop: 8,
-    zIndex: 10,
-    textAlign: 'center',
-    opacity: 0.8,
   },
   bubbleContainer: {
     position: 'absolute',
@@ -695,57 +765,169 @@ const styles = StyleSheet.create({
     height: '100%',
     position: 'relative',
   },
-  resultImage: {width: '100%', height: '100%'},
-  resultOverlay: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    backgroundColor: 'rgba(106, 13, 173, 0.9)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  resultSuccessText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  resultSubText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    marginTop: 2,
-  },
   placeholderPerson: {
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
     height: '100%',
+    backgroundColor: '#F0F0F0',
   },
-  placeholderText: {fontSize: 18, color: 'gray', fontWeight: 'bold'},
+  placeholderText: {
+    fontSize: 18,
+    color: 'gray',
+    fontWeight: 'bold',
+  },
   changePersonButton: {
     position: 'absolute',
-    bottom: 16,
-    left: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    top: 50,
+    left: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  changePersonText: {color: 'white', fontWeight: 'bold'},
-  bottomContainer: {
-    minHeight: 300, // 최소 높이 설정 (flex 대신)
-    borderTopWidth: 1, 
-    borderTopColor: '#E0E0E0',
-    paddingBottom: 20, // 하단 패딩 추가
+  changePersonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
-  categoryListContainer: {paddingTop: 10},
-  clothingListContainer: {flex: 1},
-  categoryText: {
+  tryOnButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    backgroundColor: '#6A0DAD',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  tryOnButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  newTryOnButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  newTryOnButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  resultButtonContainer: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  newTryOnButtonLeft: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 14,
     paddingVertical: 10,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 120,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  downloadButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 120,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  downloadButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  // 하단 옷장 패널
+  closetPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 350,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: -2},
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  dragHandle: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  dragIndicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#C0C0C0',
+    borderRadius: 2,
+    marginBottom: 8,
+  },
+  closetTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  categoryContainer: {
+    paddingVertical: 10,
+  },
+  categoryText: {
+    paddingVertical: 8,
     paddingHorizontal: 16,
     marginRight: 8,
-    fontSize: 16,
-    color: 'gray',
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
   },
   activeCategoryText: {
     fontWeight: 'bold',
@@ -753,97 +935,43 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: '#000000',
   },
+  clothingListContainer: {
+    flex: 1,
+  },
   clothingItem: {
-    width: 100,
-    height: 120,
-    borderRadius: 12,
-    marginRight: 10,
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 8,
     backgroundColor: '#E0E0E0',
   },
-  selectedClothingItem: {borderWidth: 3, borderColor: '#6A0DAD'},
+  selectedClothingItem: {
+    borderWidth: 2,
+    borderColor: '#6A0DAD',
+  },
   addClothingButton: {
-    width: 100,
-    height: 120,
-    borderRadius: 12,
-    marginRight: 10,
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 8,
     backgroundColor: '#F0F0F0',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#E0E0E0',
     borderStyle: 'dashed',
   },
-  addClothingButtonText: {fontSize: 40, color: 'gray'},
-  tryOnButton: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    backgroundColor: '#6A0DAD',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
+  addClothingButtonText: {
+    fontSize: 24,
+    color: '#999',
   },
-  tryOnButtonText: {color: 'white', fontWeight: 'bold', fontSize: 14},
-  newTryOnButton: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  newTryOnButtonText: {color: 'white', fontWeight: 'bold', fontSize: 14},
-  selectedItemsContainer: {
-    backgroundColor: '#F8F8F8',
-    paddingVertical: 10,
-    paddingTop: 15, // 상단 패딩 증가로 삭제 버튼 공간 확보
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  selectedItemsHeader: {
-    paddingHorizontal: 15,
-    marginBottom: 8,
-  },
-  selectedItemsTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  selectionLimitText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  selectedItemWrapper: {
-    position: 'relative',
-    marginRight: 10,
-    paddingTop: 5, // 상단 여백 추가로 삭제 버튼이 잘리지 않도록
-  },
-  selectedItemImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+  disabledAddClothingButton: {
     backgroundColor: '#E0E0E0',
+    borderColor: '#C0C0C0',
   },
-  removeItemButton: {
-    position: 'absolute',
-    top: 0, // -5에서 0으로 변경하여 잘림 방지
-    right: -5,
-    backgroundColor: '#FF6B6B',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  removeItemText: {
-    color: 'white',
-    fontSize: 12,
+  disabledAddClothingButtonText: {
+    fontSize: 10,
+    color: '#999',
     fontWeight: 'bold',
   },
   clothingItemContainer: {
@@ -857,15 +985,15 @@ const styles = StyleSheet.create({
     top: 5,
     right: 5,
     backgroundColor: '#6A0DAD',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
   },
   selectedIndicatorText: {
     color: 'white',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: 'bold',
   },
   disabledOverlay: {
@@ -873,11 +1001,12 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    height: 80,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 8,
+    marginRight: 8,
   },
   disabledText: {
     color: 'white',

@@ -8,10 +8,12 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BootSplash from 'react-native-bootsplash';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import DetailScreen from './src/screens/DetailScreen';
+import CodiDetailScreen from './src/screens/CodiDetailScreen';
 import MainTabNavigator from './src/navigators/MainTabNavigator'; // ✅ 새로 만든 내비게이터 import
 import Toast, {
   BaseToast,
@@ -26,6 +28,12 @@ export type RootStackParamList = {
   Login: undefined;
   Main: undefined; // ✅ MainTabNavigator를 위한 타입
   Detail: {imageUrl: string};
+  CodiDetail: {
+    codiId: string;
+    imageUrl: string;
+    createdAt: any;
+    isLiked?: boolean;
+  };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -117,30 +125,33 @@ function App(): React.JSX.Element | null {
   console.log('🎯 현재 상태:', {isFirstLaunch, user: !!user, initializing});
 
   return (
-    <ActionSheetProvider>
-      <>
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{headerShown: false}}>
-            {user ? (
-              <>
-                <Stack.Screen name="Main" component={MainTabNavigator} />
-                <Stack.Screen name="Detail" component={DetailScreen} />
-              </>
-            ) : isFirstLaunch ? (
-              <>
-                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+    <GestureHandlerRootView style={{flex: 1}}>
+      <ActionSheetProvider>
+        <>
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{headerShown: false}}>
+              {user ? (
+                <>
+                  <Stack.Screen name="Main" component={MainTabNavigator} />
+                  <Stack.Screen name="Detail" component={DetailScreen} />
+                  <Stack.Screen name="CodiDetail" component={CodiDetailScreen} />
+                </>
+              ) : isFirstLaunch ? (
+                <>
+                  <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                  <Stack.Screen name="Login" component={LoginScreen} />
+                </>
+              ) : (
                 <Stack.Screen name="Login" component={LoginScreen} />
-              </>
-            ) : (
-              <Stack.Screen name="Login" component={LoginScreen} />
-            )}
-          </Stack.Navigator>
-        </NavigationContainer>
+              )}
+            </Stack.Navigator>
+          </NavigationContainer>
 
-        {/* ✅ Toast 컴포넌트는 NavigationContainer와 나란히 둡니다. */}
-        <Toast config={toastConfig} />
-      </>
-    </ActionSheetProvider>
+          {/* ✅ Toast 컴포넌트는 NavigationContainer와 나란히 둡니다. */}
+          <Toast config={toastConfig} />
+        </>
+      </ActionSheetProvider>
+    </GestureHandlerRootView>
   );
 }
 

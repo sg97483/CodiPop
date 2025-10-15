@@ -8,6 +8,7 @@ import {Image, Platform} from 'react-native';
 import HomeScreen from '../screens/HomeScreen';
 import VirtualFittingScreen from '../screens/VirtualFittingScreen';
 import ClosetScreen from '../screens/ClosetScreen';
+import RecentCodiScreen from '../screens/RecentCodiScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 // Tab Navigator의 타입을 정의합니다.
@@ -15,6 +16,7 @@ export type MainTabParamList = {
   Home: undefined;
   VirtualFitting: undefined;
   Closet: undefined;
+  RecentCodi: undefined;
   Profile: undefined;
 };
 
@@ -29,9 +31,9 @@ const MainTabNavigator = () => {
         tabBarActiveTintColor: '#6A0DAD',
         tabBarInactiveTintColor: '#8E8E93',
         tabBarStyle: {
-          height: Platform.OS === 'ios' ? 90 : 70,
-          paddingBottom: Platform.OS === 'ios' ? 30 : 10,
-          paddingTop: 10,
+          height: Platform.OS === 'ios' ? 76 : 59,
+          paddingBottom: Platform.OS === 'ios' ? 25 : 8,
+          paddingTop: 8,
           backgroundColor: '#FFFFFF',
           borderTopWidth: 0,
           elevation: 20,
@@ -39,13 +41,11 @@ const MainTabNavigator = () => {
           shadowOffset: {width: 0, height: -4},
           shadowOpacity: 0.1,
           shadowRadius: 12,
-          borderTopLeftRadius: 20,
-          borderTopRightRadius: 20,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
-          marginTop: 4,
+          marginTop: 3,
         },
         // ✅ 아이콘 로직을 screenOptions에서 한 번에 관리합니다.
         tabBarIcon: ({focused, color, size}) => {
@@ -63,6 +63,10 @@ const MainTabNavigator = () => {
             iconSource = focused
               ? require('../assets/icons/icon-closet-active.png')
               : require('../assets/icons/icon-closet-inactive.png');
+          } else if (route.name === 'RecentCodi') {
+            iconSource = focused
+              ? require('../assets/icons/icon-fitting-active.png') // 임시로 피팅룸 아이콘 사용
+              : require('../assets/icons/icon-fitting-inactive.png');
           } else if (route.name === 'Profile') {
             // ✅ Profile 아이콘 분기 추가
             iconSource = focused
@@ -73,7 +77,7 @@ const MainTabNavigator = () => {
           return (
             <Image
               source={iconSource}
-              style={{width: 24, height: 24, tintColor: color}}
+              style={{width: 22, height: 22, tintColor: color}}
             />
           );
         },
@@ -97,6 +101,13 @@ const MainTabNavigator = () => {
         component={ClosetScreen}
         options={{
           title: '내 옷장',
+        }}
+      />
+      <Tab.Screen
+        name="RecentCodi"
+        component={RecentCodiScreen}
+        options={{
+          title: '코디북',
         }}
       />
       <Tab.Screen
