@@ -18,15 +18,6 @@ import {
   Animated as RNAnimated,
 } from 'react-native';
 import {PanGestureHandler, State} from 'react-native-gesture-handler';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
-  interpolate,
-  Easing,
-} from 'react-native-reanimated';
 import {
   useNavigation,
   useIsFocused,
@@ -41,93 +32,11 @@ import Toast from 'react-native-toast-message';
 import {CameraRoll} from '@react-native-camera-roll/camera-roll';
 import RNFS from 'react-native-fs';
 import {useActionSheet} from '@expo/react-native-action-sheet';
+import LottieView from 'lottie-react-native';
 
 const CATEGORIES = ['All', 'Tops', 'Bottoms', 'Shoes', 'Acc'];
 const MAX_CLOTHING_SELECTION = 2; // 최대 옷 선택 개수
 const MAX_CLOSET_ITEMS = 30; // 옷장 최대 아이템 개수
-
-// 탄산 거품 애니메이션 컴포넌트
-const BubbleAnimation = () => {
-  const bubbles = Array.from({length: 16}, (_, i) => ({
-    id: i,
-    translateY: useSharedValue(0),
-    opacity: useSharedValue(0),
-    scale: useSharedValue(0.5),
-  }));
-
-  useEffect(() => {
-    const startAnimation = () => {
-      bubbles.forEach((bubble, index) => {
-        const delay = index * 150; // 각 거품마다 150ms씩 지연 (더 빠르게)
-        
-        setTimeout(() => {
-          // 무한 반복 애니메이션
-          bubble.translateY.value = withRepeat(
-            withTiming(-300, {
-              duration: 2000,
-              easing: Easing.out(Easing.cubic),
-            }),
-            -1,
-            false
-          );
-          
-          bubble.opacity.value = withRepeat(
-            withSequence(
-              withTiming(1, {duration: 300}),
-              withTiming(0, {duration: 1700})
-            ),
-            -1,
-            false
-          );
-          
-          bubble.scale.value = withRepeat(
-            withSequence(
-              withTiming(1, {duration: 300}),
-              withTiming(0.8, {duration: 1700})
-            ),
-            -1,
-            false
-          );
-        }, delay);
-      });
-    };
-
-    startAnimation();
-    
-    // 3초마다 새로운 애니메이션 사이클 시작
-    const interval = setInterval(startAnimation, 3000);
-    
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <View style={styles.bubbleContainer}>
-      {bubbles.map((bubble, index) => {
-        const animatedStyle = useAnimatedStyle(() => ({
-          transform: [
-            {translateY: bubble.translateY.value},
-            {scale: bubble.scale.value},
-          ],
-          opacity: bubble.opacity.value,
-        }));
-
-        return (
-          <Animated.View
-            key={bubble.id}
-            style={[
-              styles.bubble,
-              {
-                left: 15 + (index % 5) * 70, // 5열로 배치
-                bottom: 40 + (index % 3) * 25, // 3행으로 배치
-              },
-              animatedStyle,
-            ]}
-          />
-        );
-      })}
-    </View>
-  );
-};
 
 // ✅ ClosetItem 타입을 파일 상단에 정의하여 재사용합니다.
 interface ClosetItem {
@@ -519,7 +428,12 @@ const VirtualFittingScreen = () => {
       <View style={styles.mainImageContainer}>
         {isProcessing ? (
           <View style={styles.processingContainer}>
-            <BubbleAnimation />
+            <LottieView
+              source={require('../assets/animations/Bubbles.json')}
+              autoPlay
+              loop
+              style={{width: 300, height: 300}}
+            />
             <Text style={styles.processingText}>최신 AI 기술로 코디 진행 중...</Text>
           </View>
         ) : resultImage ? (
@@ -587,7 +501,7 @@ const VirtualFittingScreen = () => {
             transform: [{
               translateY: slideUpAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [300, 0], // 패널이 아래에서 위로 올라옴
+                outputRange: [170, 0], // 패널이 아래에서 위로 올라옴
               })
             }]
           }
@@ -733,7 +647,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    height: '100%',
+    height: '110%',
     position: 'relative',
   },
   processingText: {
@@ -743,22 +657,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     zIndex: 10,
     textAlign: 'center',
-  },
-  bubbleContainer: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bubble: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(106, 13, 173, 0.3)',
-    borderWidth: 2,
-    borderColor: 'rgba(106, 13, 173, 0.6)',
   },
   resultContainer: {
     width: '100%',
@@ -781,43 +679,45 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     left: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
   },
   changePersonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
+    color: '#333',
+    fontWeight: '700',
+    fontSize: 15,
+    letterSpacing: -0.3,
   },
   tryOnButton: {
     position: 'absolute',
     top: 50,
     right: 20,
     backgroundColor: '#6A0DAD',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowColor: '#6A0DAD',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   tryOnButtonText: {
     color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
+    fontWeight: '700',
+    fontSize: 15,
+    letterSpacing: -0.3,
   },
   newTryOnButton: {
     position: 'absolute',
@@ -836,9 +736,10 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   newTryOnButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
+    color: '#6A0DAD',
+    fontWeight: '700',
+    fontSize: 15,
+    letterSpacing: -0.3,
   },
   resultButtonContainer: {
     position: 'absolute',
@@ -850,39 +751,42 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   newTryOnButtonLeft: {
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 120,
+    minWidth: 130,
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(106, 13, 173, 0.2)',
   },
   downloadButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 22,
+    backgroundColor: '#6A0DAD',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 120,
+    minWidth: 130,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowColor: '#6A0DAD',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   downloadButtonText: {
     color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
+    fontWeight: '700',
+    fontSize: 15,
+    letterSpacing: -0.3,
   },
   // 하단 옷장 패널
   closetPanel: {
@@ -890,7 +794,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 350,
+    height: 220,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -936,7 +840,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#000000',
   },
   clothingListContainer: {
-    flex: 1,
+    paddingVertical: 10,
   },
   clothingItem: {
     width: 80,

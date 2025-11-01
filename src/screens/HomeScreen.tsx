@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Image,
   ScrollView,
+  ImageBackground,
 } from 'react-native';
 import {useNavigation, useIsFocused} from '@react-navigation/native'; // ✅ useIsFocused 추가
 import {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
@@ -175,7 +176,7 @@ const HomeScreen = () => {
             onPress={() => navigation.jumpTo('Profile')}>
             {getUserProfileImage() ? (
               <Image
-                source={{uri: getUserProfileImage()}}
+                source={{uri: getUserProfileImage() || ''}}
                 style={styles.profileImage}
               />
             ) : (
@@ -191,26 +192,34 @@ const HomeScreen = () => {
         {/* --- 메인 기능 안내 카드 --- */}
         <TouchableOpacity
           style={styles.mainCtaCard}
-          onPress={() => navigation.jumpTo('VirtualFitting')}>
-          <View style={styles.ctaTextContainer}>
-            <Text style={styles.ctaTitle}>가상 피팅룸</Text>
-            <Text style={styles.ctaSubtitle}>
-              사진 두 장으로 나만의 코디를 완성해보세요 ✨
-            </Text>
-          </View>
-          <Text style={styles.ctaIcon}>🚀</Text>
+          onPress={() => navigation.jumpTo('VirtualFitting')}
+          activeOpacity={0.9}>
+          <ImageBackground
+            source={require('../assets/images/home_fitting_human2.png')}
+            style={styles.ctaGradient}
+            imageStyle={styles.backgroundImage}
+            resizeMode="cover">
+            <View style={styles.ctaTitleContainer}>
+              <Text style={styles.ctaTitle}>가상 피팅룸</Text>
+            </View>
+            <View style={styles.ctaContentColumn}>
+              <View style={styles.ctaContentRow}>
+                <Text style={styles.ctaSubtitle}>
+                  사진으로 나만의 코디를 완성해보세요
+                </Text>
+                <TouchableOpacity
+                  style={styles.ctaButton}
+                  onPress={() => navigation.jumpTo('VirtualFitting')}>
+                  <Text style={styles.ctaButtonText}>시작하기</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ImageBackground>
         </TouchableOpacity>
 
-        {/* --- 오늘의 추천 섹션 --- */}
+        {/* --- 가장 많은 TOP 아이템 영역 --- */}
         {recommendations && (
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>오늘의 추천</Text>
-              <TouchableOpacity onPress={() => navigation.jumpTo('Closet')}>
-                <Text style={styles.seeAllText}>전체보기</Text>
-              </TouchableOpacity>
-            </View>
-            
+          <View style={styles.recommendationCardWrapper}>
             <View style={styles.recommendationCard}>
               <View style={styles.recommendationHeader}>
                 <Text style={styles.recommendationTitle}>
@@ -228,7 +237,7 @@ const HomeScreen = () => {
                 keyExtractor={item => item.id}
                 renderItem={({item}) => (
                   <TouchableOpacity
-                    onPress={() => navigation.jumpTo('VirtualFitting', {clothingUrl: item.imageUrl})}
+                    onPress={() => navigation.navigate('VirtualFitting', {clothingUrl: item.imageUrl})}
                     style={styles.recommendationItem}>
                     <Image
                       source={{uri: item.imageUrl}}
@@ -328,34 +337,83 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   mainCtaCard: {
-    backgroundColor: '#1A1A2E',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 24,
     marginHorizontal: 20,
     marginTop: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    marginBottom: 10,
+    overflow: 'hidden',
+    shadowColor: '#8B5CF6',
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
   },
-  ctaTextContainer: {
-    flex: 1,
+  ctaGradient: {
+    minHeight: 208,
+    overflow: 'hidden',
+    backgroundColor: '#8B5CF6',
+  },
+  backgroundImage: {
+    opacity: 1,
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+  },
+  ctaTitleContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: 24,
+    paddingBottom: 8,
+    zIndex: 1,
+  },
+  ctaContentColumn: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 24,
+    paddingTop: 8,
+    zIndex: 1,
+  },
+  ctaContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   ctaTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#FFFFFF',
+    letterSpacing: -0.5,
   },
   ctaSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 8,
-    lineHeight: 20,
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.95)',
+    lineHeight: 22,
+    fontWeight: '400',
+    flex: 1,
   },
-  ctaIcon: {
-    fontSize: 32,
+  ctaButton: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+  },
+  ctaButtonText: {
+    color: '#8B5CF6',
+    fontSize: 13,
+    fontWeight: '700',
   },
   sectionContainer: {
-    marginTop: 30,
+    marginTop: 15,
     paddingLeft: 20,
   },
   sectionHeader: {
@@ -374,11 +432,14 @@ const styles = StyleSheet.create({
     color: '#6A0DAD',
     fontWeight: '600',
   },
+  recommendationCardWrapper: {
+    marginTop: 15,
+    paddingHorizontal: 20,
+  },
   recommendationCard: {
     backgroundColor: '#F8F9FA',
     borderRadius: 16,
     padding: 16,
-    marginRight: 20,
     marginTop: 8,
   },
   recommendationHeader: {

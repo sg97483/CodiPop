@@ -3,6 +3,7 @@
 import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {Image, Platform} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 // Tab으로 보여줄 화면들을 import 합니다.
 import HomeScreen from '../screens/HomeScreen';
@@ -14,7 +15,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 // Tab Navigator의 타입을 정의합니다.
 export type MainTabParamList = {
   Home: undefined;
-  VirtualFitting: undefined;
+  VirtualFitting: {clothingUrl: string} | undefined;
   Closet: undefined;
   RecentCodi: undefined;
   Profile: undefined;
@@ -23,6 +24,8 @@ export type MainTabParamList = {
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const MainTabNavigator = () => {
+  const insets = useSafeAreaInsets();
+  
   return (
     <Tab.Navigator
       screenOptions={({route}) => ({
@@ -41,11 +44,12 @@ const MainTabNavigator = () => {
           shadowOffset: {width: 0, height: -4},
           shadowOpacity: 0.1,
           shadowRadius: 12,
+          marginBottom: insets.bottom,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
-          marginTop: 3,
+          marginTop: -4,
         },
         // ✅ 아이콘 로직을 screenOptions에서 한 번에 관리합니다.
         tabBarIcon: ({focused, color, size}) => {

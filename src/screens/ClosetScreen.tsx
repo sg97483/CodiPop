@@ -282,7 +282,7 @@ const ClosetScreen = () => {
           contentContainerStyle={styles.gridContainer}
           // 만약 필터링 결과가 없을 때를 대비한 처리
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
+            <View style={StyleSheet.flatten([styles.emptyContainer, {height: 400}])}>
               <Text style={styles.emptyText}>
                 선택된 카테고리에 아이템이 없어요.
               </Text>
@@ -400,7 +400,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20, // 텍스트가 잘리지 않도록
+    padding: 20,
+    minHeight: '100%', // 화면 전체 높이 확보
   },
   emptyText: {
     fontSize: 18,

@@ -3,12 +3,15 @@
 import './src/i18n';
 import './src/utils/logger'; // Firebase warning 필터링
 import React, {useState, useEffect} from 'react';
+import {View} from 'react-native';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BootSplash from 'react-native-bootsplash';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import LottieView from 'lottie-react-native';
 
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -116,19 +119,35 @@ function App(): React.JSX.Element | null {
     }
   }, [isFirstLaunch, initializing]);
 
-  // 로딩이 모두 끝날 때까지 스플래시 화면 유지
+  // 로딩이 모두 끝날 때까지 Lottie 애니메이션 표시
   if (isFirstLaunch === null || initializing) {
-    return null;
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#FFFFFF',
+        }}>
+        <LottieView
+          source={require('./src/assets/animations/Bubbles.json')}
+          autoPlay
+          loop
+          style={{width: 300, height: 300}}
+        />
+      </View>
+    );
   }
 
   // 디버깅을 위한 로그
   console.log('🎯 현재 상태:', {isFirstLaunch, user: !!user, initializing});
 
   return (
-    <GestureHandlerRootView style={{flex: 1}}>
-      <ActionSheetProvider>
-        <>
-          <NavigationContainer>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{flex: 1}}>
+        <ActionSheetProvider>
+          <>
+            <NavigationContainer>
             <Stack.Navigator screenOptions={{headerShown: false}}>
               {user ? (
                 <>
@@ -150,8 +169,9 @@ function App(): React.JSX.Element | null {
           {/* ✅ Toast 컴포넌트는 NavigationContainer와 나란히 둡니다. */}
           <Toast config={toastConfig} />
         </>
-      </ActionSheetProvider>
-    </GestureHandlerRootView>
+        </ActionSheetProvider>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
 

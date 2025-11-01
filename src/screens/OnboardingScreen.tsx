@@ -12,6 +12,7 @@ import {
   StatusBar,
   SafeAreaView,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -58,6 +59,7 @@ const OnboardingScreen = () => {
   const {t} = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const insets = useSafeAreaInsets();
 
   const handleOnboardingDone = async () => {
     try {
@@ -137,7 +139,7 @@ const OnboardingScreen = () => {
       </View>
 
       {/* ✅ 2. 하단 버튼 영역 */}
-      <View style={styles.buttonContainer}>
+      <View style={[styles.buttonContainer, {paddingBottom: insets.bottom + 16}]}>
         <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
           <Text style={styles.skipButtonText}>{t('skip')}</Text>
         </TouchableOpacity>
@@ -176,7 +178,7 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
   onboardingImage: {
-    width: screenWidth * 0.8,
+    width: screenWidth * 0.95,
     height: '100%',
   },
   textContainer: {

@@ -13,6 +13,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTranslation} from 'react-i18next';
 import auth from '@react-native-firebase/auth';
 import {GoogleSignin} from '@react-native-google-signin/google-signin';
@@ -26,6 +27,7 @@ const BORDER_COLOR = '#E0E0E0';
 const LoginScreen = () => {
   const {t} = useTranslation();
   const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -71,7 +73,7 @@ const LoginScreen = () => {
         <Text style={styles.subtitle}>{t('welcomeSubtitle')}</Text>
       </View>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, {paddingBottom: insets.bottom + 16}]}>
         {loading ? (
           <ActivityIndicator size="large" color={BRAND_PRIMARY} />
         ) : (
