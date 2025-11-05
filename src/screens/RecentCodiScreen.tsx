@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import {useIsFocused, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
@@ -41,6 +42,7 @@ const RecentCodiScreen = () => {
   const isFocused = useIsFocused();
   const navigation = useNavigation<RecentCodiScreenNavigationProp>();
   const user = auth().currentUser;
+  const insets = useSafeAreaInsets();
   
   const [loading, setLoading] = useState(true);
   const [recentCodiItems, setRecentCodiItems] = useState<RecentCodiItem[]>([]);
@@ -469,7 +471,7 @@ const RecentCodiScreen = () => {
           data={groupedData}
           keyExtractor={item => item.dateKey}
           renderItem={renderGroupItem}
-          contentContainerStyle={styles.groupContainer}
+          contentContainerStyle={[styles.groupContainer, {paddingBottom: insets.bottom + 20}]}
           showsVerticalScrollIndicator={false}
         />
       ) : displayedItems.length > 0 ? (
@@ -480,7 +482,7 @@ const RecentCodiScreen = () => {
           numColumns={3}
           keyExtractor={item => item.id}
           renderItem={renderGridItem}
-          contentContainerStyle={styles.gridContainer}
+          contentContainerStyle={[styles.gridContainer, {paddingBottom: insets.bottom + 20}]}
           showsVerticalScrollIndicator={false}
         />
       ) : (

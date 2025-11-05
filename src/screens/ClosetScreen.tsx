@@ -13,10 +13,11 @@ import {
   Alert,
 } from 'react-native';
 import {useNavigation, useIsFocused} from '@react-navigation/native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
-const CATEGORIES = ['All', 'Tops', 'Bottoms', 'Shoes', 'Acc'];
+const CATEGORIES = ['ALL', 'TOPS', 'BOTTOMS', 'SHOES', 'OUTER'];
 const MAX_CLOSET_ITEMS = 30; // 옷장 최대 아이템 개수
 
 type ClosetScreenNavigationProp = {
@@ -32,6 +33,7 @@ interface ClosetItem {
 const ClosetScreen = () => {
   const navigation = useNavigation<ClosetScreenNavigationProp>();
   const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [closetItems, setClosetItems] = useState<ClosetItem[]>([]);
   const user = auth().currentUser;
@@ -42,7 +44,7 @@ const ClosetScreen = () => {
     {},
   );
 
-  const [activeCategory, setActiveCategory] = useState('All');
+  const [activeCategory, setActiveCategory] = useState('ALL');
 
   useEffect(() => {
     if (isFocused && user) {
@@ -95,7 +97,7 @@ const ClosetScreen = () => {
   }, [isFocused, user]);
 
   const displayedItems = useMemo(() => {
-    if (activeCategory === 'All') {
+    if (activeCategory === 'ALL') {
       return closetItems;
     }
     return closetItems.filter(item => item.category === activeCategory);
@@ -279,7 +281,7 @@ const ClosetScreen = () => {
             </View>
             );
           }}
-          contentContainerStyle={styles.gridContainer}
+          contentContainerStyle={[styles.gridContainer, {paddingBottom: insets.bottom + 20}]}
           // 만약 필터링 결과가 없을 때를 대비한 처리
           ListEmptyComponent={
             <View style={StyleSheet.flatten([styles.emptyContainer, {height: 400}])}>

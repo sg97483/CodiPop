@@ -199,13 +199,14 @@ const HomeScreen = () => {
             style={styles.ctaGradient}
             imageStyle={styles.backgroundImage}
             resizeMode="cover">
+            <View style={styles.overlay} />
             <View style={styles.ctaTitleContainer}>
-              <Text style={styles.ctaTitle}>가상 피팅룸</Text>
+              <Text style={styles.ctaTitle}>Fitting Room</Text>
             </View>
             <View style={styles.ctaContentColumn}>
               <View style={styles.ctaContentRow}>
                 <Text style={styles.ctaSubtitle}>
-                  사진으로 나만의 코디를 완성해보세요
+                AI로 나만의 코디를 완성해 보세요.
                 </Text>
                 <TouchableOpacity
                   style={styles.ctaButton}
@@ -216,6 +217,40 @@ const HomeScreen = () => {
             </View>
           </ImageBackground>
         </TouchableOpacity>
+
+        {/* --- 최근에 입어본 옷 섹션 --- */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>최근에 입어본 옷</Text>
+          </View>
+
+          {loading ? (
+            <ActivityIndicator style={{marginTop: 20}} size="large" />
+          ) : recentItems.length > 0 ? (
+            <FlatList
+              data={recentItems}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={item => item.id}
+              renderItem={({item}) => (
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation.navigate('Detail', {imageUrl: item.imageUrl})
+                  }>
+                  <Image
+                    source={{uri: item.imageUrl}}
+                    style={styles.feedCard}
+                  />
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={{paddingRight: 20}}
+            />
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>아직 입어본 옷이 없어요.</Text>
+            </View>
+          )}
+        </View>
 
         {/* --- 가장 많은 TOP 아이템 영역 --- */}
         {recommendations && (
@@ -250,39 +285,6 @@ const HomeScreen = () => {
             </View>
           </View>
         )}
-
-        {/* --- 최근에 입어본 옷 섹션 --- */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>최근에 입어본 옷</Text>
-          </View>
-
-          {loading ? (
-            <ActivityIndicator style={{marginTop: 20}} size="large" />
-          ) : recentItems.length > 0 ? (
-            <FlatList
-              data={recentItems}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={item => item.id}
-              renderItem={({item}) => (
-                <TouchableOpacity
-                  onPress={() =>
-                    navigation.navigate('Detail', {imageUrl: item.imageUrl})
-                  }>
-                  <Image
-                    source={{uri: item.imageUrl}}
-                    style={styles.feedCard}
-                  />
-                </TouchableOpacity>
-              )}
-            />
-          ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>아직 입어본 옷이 없어요.</Text>
-            </View>
-          )}
-        </View>
       </ScrollView>
       {/* ✅ 중복되는 하단 영역은 제거했습니다. */}
     </SafeAreaView>
@@ -299,7 +301,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 45, // 상단 여백 10 추가 (20 → 30)
     paddingBottom: 10,
   },
   welcomeMessage: {
@@ -339,7 +341,7 @@ const styles = StyleSheet.create({
   mainCtaCard: {
     borderRadius: 24,
     marginHorizontal: 20,
-    marginTop: 20,
+    marginTop: 15,
     marginBottom: 10,
     overflow: 'hidden',
     shadowColor: '#8B5CF6',
@@ -362,7 +364,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)', // 더 진한 오버레이로 텍스트 가독성 향상
+    zIndex: 0,
   },
   ctaTitleContainer: {
     position: 'absolute',
@@ -388,17 +391,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   ctaTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#FFFFFF',
     letterSpacing: -0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 2},
+    textShadowRadius: 4,
   },
   ctaSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.95)',
+    fontSize: 14,
+    color: '#FFFFFF', // 불투명도 제거하여 더 진하게
     lineHeight: 22,
-    fontWeight: '400',
+    fontWeight: '600', // '400' → '600'으로 더 굵게
     flex: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3,
   },
   ctaButton: {
     backgroundColor: '#FFFFFF',
@@ -415,6 +424,7 @@ const styles = StyleSheet.create({
   sectionContainer: {
     marginTop: 15,
     paddingLeft: 20,
+    paddingBottom: 20, // 하단 여백 추가
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -424,7 +434,7 @@ const styles = StyleSheet.create({
     paddingRight: 20,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
   },
   seeAllText: {
@@ -433,14 +443,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   recommendationCardWrapper: {
-    marginTop: 15,
+    marginTop: 3,
+    marginBottom: 25, // 하단 여백 추가
     paddingHorizontal: 20,
   },
   recommendationCard: {
     backgroundColor: '#F8F9FA',
     borderRadius: 16,
     padding: 16,
-    marginTop: 8,
+    marginTop: 2,
   },
   recommendationHeader: {
     marginBottom: 12,
@@ -468,8 +479,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
   },
   feedCard: {
-    width: 150,
-    height: 200,
+    width: 135, // 150 * 0.9 (10% 감소)
+    height: 180, // 200 * 0.9 (10% 감소)
     backgroundColor: '#F0F0F0',
     borderRadius: 16,
     marginRight: 12,

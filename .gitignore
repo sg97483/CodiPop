@@ -33,6 +33,8 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+# Protect gradle.properties with sensitive data
+android/gradle.properties
 
 # node.js
 #

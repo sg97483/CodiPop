@@ -39,3 +39,11 @@ newArchEnabled=false
 # Use this property to enable or disable the Hermes JS engine.
 # If set to false, you will be using JSC instead.
 hermesEnabled=true
+
+# Release keystore configuration
+# ⚠️ 이 파일을 복사하여 gradle.properties를 만들고 실제 비밀번호를 입력하세요
+MYAPP_RELEASE_STORE_FILE=codipop.keystore
+MYAPP_RELEASE_KEY_ALIAS=codipop
+MYAPP_RELEASE_STORE_PASSWORD=YOUR_STORE_PASSWORD_HERE
+MYAPP_RELEASE_KEY_PASSWORD=YOUR_KEY_PASSWORD_HERE
+

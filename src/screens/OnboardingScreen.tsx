@@ -169,30 +169,33 @@ const styles = StyleSheet.create({
     width: screenWidth,
     flex: 1, // FlatList 안에서 꽉 차도록
     alignItems: 'center',
-    justifyContent: 'center', // 이미지와 텍스트를 중앙에 배치
+    justifyContent: 'flex-start', // 상단부터 배치
   },
   imageContainer: {
-    flex: 0.7, // 이미지 영역이 60%
-    justifyContent: 'flex-end', // 이미지를 아래쪽으로 정렬
-    paddingBottom: 20,
-    marginTop: 50,
+    flex: 0.85, // 이미지 영역을 더 크게 (70% → 85%)
+    justifyContent: 'center', // 이미지를 중앙에 배치
+    paddingBottom: 3, // 하단 여백 3
+    marginTop: 38, // 상단 여백 (35 → 38)
+    width: '100%',
   },
   onboardingImage: {
-    width: screenWidth * 0.95,
+    width: screenWidth * 0.98, // 이미지 크기 증가 (95% → 98%)
     height: '100%',
   },
   textContainer: {
-    flex: 0.3, // 텍스트 영역이 40%
+    flex: 0.15, // 텍스트 영역 줄이기 (30% → 15%)
     alignItems: 'center',
     paddingHorizontal: 30,
-    justifyContent: 'flex-start',
+    justifyContent: 'center', // 중앙 정렬
+    paddingTop: 8, // 상단 패딩 최소화
+    paddingBottom: 8, // 하단 패딩 최소화
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
     color: '#333333',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 8, // 공백 줄이기 (16 → 8)
     lineHeight: 36,
   },
   description: {
@@ -206,7 +209,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 10, // 공백 줄이기 (20 → 10)
   },
   paginationDot: {
     width: 8,
@@ -223,7 +226,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 10, // 공백 줄이기 (20 → 10)
     paddingBottom: 40, // 하단 여백
     backgroundColor: '#F5F5F5',
   },

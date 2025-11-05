@@ -6,12 +6,12 @@
     "googleLogin": "Google로 계속하기",
     "appleLogin": "Apple로 계속하기",
 
-    "onboarding1Title": "옷, 이제 입어보지 말고 POP!",
-    "onboarding1Description": "궁금한 옷과 내 사진만 준비하세요. 직접 입어보지 않아도 CodiPOP이 완벽한 가상 피팅을 선사합니다.",
-    "onboarding2Title": "AI 스타일리스트, 코디팝",
-    "onboarding2Description": "CodiPOP의 똑똑한 AI가 1초 만에 옷을 입은 모습을 보여줘요. 쇼핑의 마법이 당신의 폰에서 펼쳐집니다.",
-    "onboarding3Title": "가장 나다운 스타일을 찾아서",
-    "onboarding3Description": "쇼핑 실패는 이제 그만. 다양한 스타일을 마음껏 탐색하고, 가장 잘 어울리는 옷을 확신을 갖고 구매하세요.",
+    "onboarding1Title": "이제 입어보지 말고 POP!",
+    "onboarding1Description": "내 사진과 옷 사진만 준비하세요.",
+    "onboarding2Title": "가장 나 다운 스타일을 찾아서",
+    "onboarding2Description": "스타일의 마법이 당신의 폰에서 펼쳐집니다.",
+    "onboarding3Title": "AI 스타일리스트, 코디팝",
+    "onboarding3Description": "CodiPOP으로 오늘의 스타일을 입어보세요.",
     
     "skip": "건너뛰기",
     "continueButton": "계속하기",
