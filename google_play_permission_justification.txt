@@ -1,0 +1,11 @@
+Google Play Console 권한 사용 목적 설명 (한국어)
+
+이 앱은 가상 피팅 기능을 제공하는 앱입니다. 사용자가 자신의 사진과 의류 이미지를 갤러리에서 선택하여 가상으로 입어보는 핵심 기능을 수행하기 위해 READ_MEDIA_IMAGES 권한이 필요합니다. 사용자는 피팅 화면에서 사람 사진과 옷 사진을 선택하고, 선택한 이미지는 즉시 가상 피팅 처리를 위해 사용됩니다. 이미지는 사용자가 명시적으로 선택할 때만 접근되며, 백그라운드 접근이나 자동 스캔은 수행하지 않습니다.
+
+---
+
+Google Play Console Permission Justification (English)
+
+This app provides virtual fitting functionality. The READ_MEDIA_IMAGES permission is required for the core feature where users select photos of themselves and clothing items from their gallery to virtually try them on. Users select person photos and clothing images in the fitting screen, and the selected images are used immediately for virtual fitting processing. Images are accessed only when explicitly selected by the user, and we do not perform background access or automatic scanning.
+
+
