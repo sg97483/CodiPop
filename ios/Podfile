@@ -10,11 +10,11 @@ require_relative '../node_modules/@react-native-community/cli-platform-ios/nativ
 # react-native-permissions 헬퍼 스크립트 추가
 require_relative '../node_modules/react-native-permissions/scripts/setup'
 
-# 요청하신 대로 iOS 버전을 15.4로 설정
+# React Native 0.76 최소 요구사항: iOS 15.1 (현재 15.4로 설정되어 있어 충족)
 platform :ios, '15.4'
 prepare_react_native_project!
 
-# Kachi 앱에 필요한 권한들 미리 설정
+# CodiPop 앱에 필요한 권한들 미리 설정
 setup_permissions([
   'Camera',
   'MediaLibrary',
@@ -27,12 +27,14 @@ setup_permissions([
   'AppTrackingTransparency'
 ])
 
-# Firebase 등 Swift 기반 라이브러리의 안정적인 사용을 위해 static frameworks 사용
-use_frameworks! :linkage => :static
+# react-native-screens gamma 프로젝트 활성화 (React Native 0.76에서 필요)
+ENV['RNS_GAMMA_ENABLED'] = '1'
 
 target 'CodiPop' do
   config = use_native_modules!
   # Firebase를 static framework으로 사용하도록 설정
+  # ParkingPark 앱과 동일한 패턴: target 내부에 use_frameworks! 배치
+  use_frameworks! :linkage => :static
   $RNFirebaseAsStaticFramework = true
   flags = get_default_flags()
 
@@ -47,11 +49,8 @@ target 'CodiPop' do
     inherit! :complete
   end
   
-  # Firebase 관련 Pod 명시
-  pod 'GoogleUtilities', :modular_headers => true
-  pod 'FirebaseCore', :modular_headers => true
-  pod 'FirebaseCoreExtension', :modular_headers => true
-  pod 'Firebase/Messaging', :modular_headers => true
+  # Firebase는 use_native_modules!에 의해 자동으로 링크되므로 명시적으로 추가하지 않음
+  # 중복 선언 시 duplicate symbols 오류 발생
   
   # 기존 앱의 안정적인 설정을 대부분 가져온 post_install hook
   post_install do |installer|
@@ -67,6 +66,13 @@ target 'CodiPop' do
         build_config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = "arm64"
         # Bitcode 설정 비활성화 (오류 방지)
         build_config.build_settings['ENABLE_BITCODE'] = 'NO'
+        # Static framework에서 중복 심볼 방지
+        build_config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+
+        if build_config.name == 'Release'
+          build_config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+          build_config.build_settings['GENERATE_DEBUG_SYMBOLS'] = 'YES'
+        end
       end
   
       # Firebase와 관련된 BoringSSL 플래그 최적화
@@ -86,10 +92,78 @@ target 'CodiPop' do
         end
       end
   
-      # Hermes Bitcode 비활성화
+      # Hermes Bitcode 비활성화 및 dSYM 생성 설정
       if target.name == 'hermes-engine'
         target.build_configurations.each do |config|
           config.build_settings['ENABLE_BITCODE'] = 'NO'
+          if config.name == 'Release'
+            config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+            config.build_settings['GENERATE_DEBUG_SYMBOLS'] = 'YES'
+            config.build_settings['STRIP_STYLE'] = 'non-global'
+            config.build_settings['DEPLOYMENT_POSTPROCESSING'] = 'NO'
+          end
+        end
+      end
+      
+      # react-native-screens 링킹 문제 해결
+      # React Native 0.76 + react-native-screens 4.18.0에서 Fabric 컴포넌트 링킹 문제 해결
+      if target.name == 'RNScreens' || target.name.start_with?('RNScreens')
+        target.build_configurations.each do |config|
+          # Static framework에서 모듈을 제대로 export하기 위한 설정
+          config.build_settings['DEFINES_MODULE'] = 'YES'
+          config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+          # Fabric 컴포넌트가 제대로 링크되도록 설정
+          config.build_settings['SWIFT_INSTALL_OBJC_HEADER'] = 'NO'
+          # Dead code stripping 비활성화 (static framework에서 심볼 보존)
+          config.build_settings['DEAD_CODE_STRIPPING'] = 'NO'
+          # Strip style을 None으로 설정하여 모든 심볼 보존
+          config.build_settings['STRIP_STYLE'] = 'non-global'
+        end
+      end
+      
+      # Firebase 관련 타겟에 modular headers 설정 (중복 방지)
+      if target.name.include?('Firebase') || target.name.include?('GoogleUtilities')
+        target.build_configurations.each do |config|
+          config.build_settings['DEFINES_MODULE'] = 'YES'
+        end
+      end
+      
+      # React Native 관련 타겟에서 중복 링크 방지
+      if target.name.start_with?('React-') || target.name.start_with?('RCT')
+        target.build_configurations.each do |config|
+          # 중복 링크 방지를 위한 설정
+          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+        end
+      end
+      
+      # 메인 앱 타겟에 react-native-screens 심볼 강제 링크
+      if target.name == 'CodiPop'
+        target.build_configurations.each do |config|
+          # react-native-screens Fabric 컴포넌트 심볼을 강제로 링크
+          config.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
+          # 이미 추가된 플래그가 있는지 확인하고 중복 방지
+          existing_flags = config.build_settings['OTHER_LDFLAGS'] || []
+          unless existing_flags.include?('-Wl,-u,_RNSBottomTabsCls')
+            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSBottomTabsCls'
+          end
+          unless existing_flags.include?('-Wl,-u,_RNSBottomTabsScreenCls')
+            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSBottomTabsScreenCls'
+          end
+          unless existing_flags.include?('-Wl,-u,_RNSSafeAreaViewCls')
+            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSSafeAreaViewCls'
+          end
+          unless existing_flags.include?('-Wl,-u,_RNSScreenStackHostCls')
+            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSScreenStackHostCls'
+          end
+          unless existing_flags.include?('-Wl,-u,_RNSSplitViewHostCls')
+            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSSplitViewHostCls'
+          end
+          unless existing_flags.include?('-Wl,-u,_RNSSplitViewScreenCls')
+            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSSplitViewScreenCls'
+          end
+          unless existing_flags.include?('-Wl,-u,_RNSStackScreenCls')
+            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSStackScreenCls'
+          end
         end
       end
     end

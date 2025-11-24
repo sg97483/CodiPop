@@ -1,0 +1,13 @@
+diff --git a/node_modules/@react-native/community-cli-plugin/dist/commands/start/runServer.js b/node_modules/@react-native/community-cli-plugin/dist/commands/start/runServer.js
+index 9150f39..1e7ae62 100644
+--- a/node_modules/@react-native/community-cli-plugin/dist/commands/start/runServer.js
++++ b/node_modules/@react-native/community-cli-plugin/dist/commands/start/runServer.js
+@@ -153,7 +153,7 @@ async function runServer(_argv, cliConfig, args) {
+       communityMiddleware,
+       _middleware.indexPageMiddleware,
+       middleware,
+-    ],
++    ].filter(Boolean), // undefined 미들웨어 제거
+     websocketEndpoints: {
+       ...communityWebsocketEndpoints,
+       ...websocketEndpoints,

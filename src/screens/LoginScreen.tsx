@@ -17,6 +17,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTranslation} from 'react-i18next';
 import auth from '@react-native-firebase/auth';
 import {GoogleSignin} from '@react-native-google-signin/google-signin';
+import {appleAuth} from '@invertase/react-native-apple-authentication';
 
 // ✅ [변경] 밝은 테마에 맞는 색상 변수 (필요시 사용)
 const BRAND_PRIMARY = '#6A0DAD'; // 피그마의 보라색
@@ -43,7 +44,10 @@ const LoginScreen = () => {
     setLoading(true);
 
     try {
-      await GoogleSignin.hasPlayServices({showPlayServicesUpdateDialog: true});
+      // hasPlayServices는 Android 전용이므로 iOS에서는 체크하지 않음
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({showPlayServicesUpdateDialog: true});
+      }
       const {idToken} = await GoogleSignin.signIn();
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);
       await auth().signInWithCredential(googleCredential);
@@ -55,13 +59,42 @@ const LoginScreen = () => {
   };
 
   const onAppleButtonPress = async () => {
-    // ... (Apple 로그인 로직은 동일)
+    if (loading) {
+      return;
+    }
+    setLoading(true);
+
+    try {
+      // Apple 로그인 시작
+      const appleAuthRequestResponse = await appleAuth.performRequest({
+        requestedOperation: appleAuth.Operation.LOGIN,
+        requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
+      });
+
+      // Apple 로그인 취소 확인
+      if (!appleAuthRequestResponse.identityToken) {
+        throw new Error('Apple Sign In was cancelled');
+      }
+
+      // Apple 인증서 생성
+      const {identityToken, nonce} = appleAuthRequestResponse;
+      const appleCredential = auth.AppleAuthProvider.credential(identityToken, nonce);
+
+      // Firebase에 로그인
+      await auth().signInWithCredential(appleCredential);
+    } catch (error: any) {
+      console.log('Apple 로그인 에러', error);
+      if (error.code !== appleAuth.Error.CANCELED) {
+        Alert.alert('로그인 실패', error.message || 'Apple 로그인에 실패했습니다.');
+      }
+      setLoading(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       {/* ✅ [변경] 밝은 배경에 맞게 상태바 스타일 변경 */}
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" />
 
       <View style={styles.content}>
         <Image

@@ -116,7 +116,7 @@ const OnboardingScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#F5F5F5" barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" />
 
       {/* ✅ 1. 메인 콘텐츠 영역 (FlatList와 Pagination) */}
       <View style={styles.mainContent}>
@@ -147,7 +147,7 @@ const OnboardingScreen = () => {
           <Text style={styles.nextButtonText}>
             {currentIndex === onboardingData.length - 1
               ? t('getStarted')
-              : t('다음')}
+              : t('continueButton')}
           </Text>
         </TouchableOpacity>
       </View>

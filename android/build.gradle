@@ -1,13 +1,13 @@
-// KachiApp/android/build.gradle (최종 수정본)
+// CodiPop/android/build.gradle (최종 수정본)
 
 buildscript {
     ext {
         buildToolsVersion = "35.0.0"
-        minSdkVersion = 23
+        minSdkVersion = 24
         compileSdkVersion = 35
         targetSdkVersion = 35
-        ndkVersion = "26.1.10909125"
-        kotlinVersion = "1.9.22" // 라이브러리 호환성을 위해 1.9.22 유지
+        ndkVersion = "27.0.12077973" // NDK r27 for 16KB page size support
+        kotlinVersion = "1.9.25" // Downgraded for library compatibility
     }
     repositories {
         google()
@@ -15,11 +15,12 @@ buildscript {
     }
     dependencies {
         // 안드로이드 빌드 도구 버전을 명확하게 지정합니다.
-        classpath("com.android.tools.build:gradle:8.2.1")
+        // React Native 0.77 + Gradle 8.9 호환성을 위해 8.7.0 사용
+        classpath("com.android.tools.build:gradle:8.7.0")
         classpath("com.facebook.react:react-native-gradle-plugin")
         // 코틀린 플러그인 버전을 위에서 정의한 kotlinVersion 변수와 연결합니다.
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
-        // parkingpark에서 검증된 안정적인 버전을 사용합니다.
+        // Firebase Google Services 플러그인
         classpath 'com.google.gms:google-services:4.3.15'
     }
 }
@@ -30,6 +31,31 @@ allprojects {
         resolutionStrategy {
             // play-services-location 라이브러리의 버전을 21.0.1로 강제합니다.
             force 'com.google.android.gms:play-services-location:21.0.1'
+        }
+    }
+
+    // 16KB 페이지 크기 지원을 위한 네이티브 빌드 설정 주입
+    // 모든 모듈(라이브러리 포함)의 CMake 및 ndk-build에 링커 플래그 추가
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin("com.android.library") || project.plugins.hasPlugin("com.android.application")) {
+            project.android {
+                defaultConfig {
+                    externalNativeBuild {
+                        cmake {
+                            // NDK r27에서 16KB 페이지 크기 지원을 위한 필수 플래그
+                            arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+                            // ELF 세그먼트가 16KB 경계에 정렬되도록 설정
+                            arguments "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
+                        }
+                        ndkBuild {
+                            // NDK r27에서 16KB 페이지 크기 지원을 위한 필수 플래그
+                            arguments "APP_CFLAGS+=-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+                            // ndk-build를 사용하는 경우에도 동일한 플래그 적용
+                            arguments "APP_LDFLAGS+=-Wl,-z,max-page-size=16384"
+                        }
+                    }
+                }
+            }
         }
     }
 }

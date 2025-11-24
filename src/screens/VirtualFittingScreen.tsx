@@ -1,6 +1,6 @@
 // src/screens/VirtualFittingScreen.tsx
 
-import React, {useState, useEffect, useMemo, useRef} from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -17,34 +17,44 @@ import {
   ScrollView,
   Animated as RNAnimated,
   Dimensions,
+  Share,
 } from 'react-native';
-import {PanGestureHandler, State} from 'react-native-gesture-handler';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import {
   useNavigation,
   useIsFocused,
   useRoute,
   RouteProp,
 } from '@react-navigation/native';
-import {launchImageLibrary} from 'react-native-image-picker';
+import { launchImageLibrary } from 'react-native-image-picker';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import storage from '@react-native-firebase/storage';
 import Toast from 'react-native-toast-message';
-import {CameraRoll} from '@react-native-camera-roll/camera-roll';
+import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import RNFS from 'react-native-fs';
-import {useActionSheet} from '@expo/react-native-action-sheet';
+import { useActionSheet } from '@expo/react-native-action-sheet';
 import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
-import {captureRef} from 'react-native-view-shot';
-import {check, request, PERMISSIONS, RESULTS, openSettings, Permission} from 'react-native-permissions';
+import { captureRef } from 'react-native-view-shot';
+import { check, request, PERMISSIONS, RESULTS, openSettings, Permission } from 'react-native-permissions';
+import { useTranslation } from 'react-i18next';
+// import Share from 'react-native-share'; // ❌ 충돌 발생으로 제거
+// import { RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
+
+// const adUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxxxxxx/yyyyyyyyyy';
+
+// const rewarded = RewardedAd.createForAdRequest(adUnitId, {
+//   requestNonPersonalizedAdsOnly: true,
+// });
 
 const CATEGORIES = ['ALL', 'TOPS', 'BOTTOMS', 'SHOES', 'OUTER'];
 const MAX_CLOTHING_SELECTION = 2; // 최대 옷 선택 개수
 const MAX_CLOSET_ITEMS = 30; // 옷장 최대 아이템 개수
 const MAX_DAILY_FITTING = 5; // 하루 최대 이미지 합성 횟수
 
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_MARGIN = 4;
 const CONTAINER_PADDING = 10;
 const ITEMS_PER_ROW = 5;
@@ -75,10 +85,11 @@ interface GridItem {
 const VirtualFittingScreen = () => {
   const navigation = useNavigation<any>();
   const route =
-    useRoute<RouteProp<{params: {clothingUrl?: string}}, 'params'>>();
+    useRoute<RouteProp<{ params: { clothingUrl?: string } }, 'params'>>();
   const isFocused = useIsFocused();
   const user = auth().currentUser;
-  const {showActionSheetWithOptions} = useActionSheet(); // ✅ 훅 사용
+  const { showActionSheetWithOptions } = useActionSheet(); // ✅ 훅 사용
+  const { t } = useTranslation();
 
   const [personImage, setPersonImage] = useState<string | null>(null);
   const [resultImage, setResultImage] = useState<string | null>(null);
@@ -96,17 +107,56 @@ const VirtualFittingScreen = () => {
   const slideUpAnim = useRef(new RNAnimated.Value(0)).current; // 하단 영역 슬라이드 업 애니메이션
   const panGestureRef = useRef<PanGestureHandler>(null);
 
-  const [imageLoading, setImageLoading] = useState<{[key: string]: boolean}>(
+  const [imageLoading, setImageLoading] = useState<{ [key: string]: boolean }>(
     {},
   ); // ✅ 이미지 로딩 state 추가
   const [remainingCount, setRemainingCount] = useState<number>(MAX_DAILY_FITTING); // 남은 일일 사용 횟수
+  // const [isAdLoaded, setIsAdLoaded] = useState(false);
+
+  // // 광고 로드 및 이벤트 리스너 설정
+  // useEffect(() => {
+  //   const unsubscribeLoaded = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
+  //     setIsAdLoaded(true);
+  //   });
+  //   const unsubscribeEarned = rewarded.addAdEventListener(
+  //     RewardedAdEventType.EARNED_REWARD,
+  //     reward => {
+  //       console.log('User earned reward of ', reward);
+  //       // 보상 지급: 사용 횟수 1회 차감 (즉, 1회 충전)
+  //       decreaseDailyUsageCount().then(() => {
+  //         checkDailyUsage().then(({ remainingCount }) => {
+  //           setRemainingCount(remainingCount);
+  //           Toast.show({ type: 'success', text1: '1회 충전 완료! 🎉', text2: '이제 다시 피팅해 보세요!' });
+  //         });
+  //       });
+  //     },
+  //   );
+
+  //   // 광고 로드
+  //   rewarded.load();
+
+  //   return () => {
+  //     unsubscribeLoaded();
+  //     unsubscribeEarned();
+  //   };
+  // }, []);
+
+  // // 광고 보여주기 함수
+  // const showRewardAd = () => {
+  //   if (isAdLoaded) {
+  //     rewarded.show();
+  //   } else {
+  //     Toast.show({ type: 'error', text1: '광고 준비 중', text2: '잠시 후 다시 시도해 주세요.' });
+  //     rewarded.load(); // 다시 로드 시도
+  //   }
+  // };
 
   // 워크스루 초기화 - 화면 포커스 시 체크
   useEffect(() => {
     if (isFocused) {
       checkAndStartWorkthrough();
       // 남은 일일 사용 횟수 업데이트
-      checkDailyUsage().then(({remainingCount}) => {
+      checkDailyUsage().then(({ remainingCount }) => {
         setRemainingCount(remainingCount);
       });
     }
@@ -159,7 +209,7 @@ const VirtualFittingScreen = () => {
   useEffect(() => {
     if (isFocused && route.params?.clothingUrl) {
       setSelectedClothingImages([route.params.clothingUrl]);
-      navigation.setParams({clothingUrl: undefined});
+      navigation.setParams({ clothingUrl: undefined });
     }
   }, [isFocused, route.params?.clothingUrl, navigation]);
 
@@ -175,7 +225,7 @@ const VirtualFittingScreen = () => {
         .onSnapshot(querySnapshot => {
           const items: ClosetItem[] = [];
           querySnapshot.forEach(doc =>
-            items.push({id: doc.id, ...(doc.data() as {imageUrl: string})}),
+            items.push({ id: doc.id, ...(doc.data() as { imageUrl: string }) }),
           );
           setClosetItems(items);
           setLoadingCloset(false);
@@ -194,7 +244,7 @@ const VirtualFittingScreen = () => {
 
   // 그리드 레이아웃을 위한 데이터 준비 (첫 번째 아이템은 추가 버튼용)
   const gridItems = useMemo((): GridItem[] => {
-    return [{id: 'add-button', isAddButton: true}, ...displayedItems.map(item => ({
+    return [{ id: 'add-button', isAddButton: true }, ...displayedItems.map(item => ({
       id: item.id,
       imageUrl: item.imageUrl,
       category: item.category,
@@ -209,10 +259,10 @@ const VirtualFittingScreen = () => {
     const PADDING_TOP_BOTTOM = 10; // 상하 여백
     const BOTTOM_PADDING = 12; // 하단 여백 (15 → 12)
     const EXTRA_SPACE = 7; // 추가 여백 (10 → 7)
-    
+
     const numRows = Math.ceil(gridItems.length / ITEMS_PER_ROW);
     const itemsHeight = numRows * ROW_HEIGHT;
-    
+
     // 최소 높이 보장, 최대 높이 제한
     const calculatedHeight = DRAG_HANDLE_HEIGHT + CATEGORY_HEIGHT + itemsHeight + PADDING_TOP_BOTTOM + BOTTOM_PADDING + EXTRA_SPACE;
     return Math.max(200, Math.min(calculatedHeight, 350)); // 최소 200, 최대 350
@@ -225,7 +275,7 @@ const VirtualFittingScreen = () => {
 
   // 사람 이미지 선택 함수
   const handleSelectPerson = async () => {
-    const result = await launchImageLibrary({mediaType: 'photo'});
+    const result = await launchImageLibrary({ mediaType: 'photo' });
     if (result.assets && result.assets[0].uri) {
       setPersonImage(result.assets[0].uri);
       // 사람 이미지 선택 시 하단 영역이 위로 올라가는 애니메이션
@@ -240,10 +290,10 @@ const VirtualFittingScreen = () => {
   // 이미지를 Firebase Storage에 업로드하는 함수
   const uploadImageToStorage = async (localImageUri: string, folder: string): Promise<string> => {
     if (!user) throw new Error('사용자가 로그인되지 않았습니다.');
-    
+
     const filename = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
     const reference = storage().ref(`users/${user.uid}/${folder}/${filename}`);
-    
+
     try {
       await reference.putFile(localImageUri);
       const downloadUrl = await reference.getDownloadURL();
@@ -259,7 +309,7 @@ const VirtualFittingScreen = () => {
     if (!imageUrl || !user) {
       return;
     }
-    
+
     try {
       // 현재 옷장 아이템 개수 확인
       const closetSnapshot = await firestore()
@@ -267,22 +317,22 @@ const VirtualFittingScreen = () => {
         .doc(user.uid)
         .collection('closet')
         .get();
-      
+
       const currentItemCount = closetSnapshot.size;
-      
+
       // 30개 제한 확인
       if (currentItemCount >= MAX_CLOSET_ITEMS) {
         Toast.show({
           type: 'error',
-          text1: '옷장이 가득참',
-          text2: `최대 ${MAX_CLOSET_ITEMS}개의 아이템만 저장할 수 있습니다.`,
+          text1: t('closetFull'),
+          text2: t('closetFullMessage', { max: MAX_CLOSET_ITEMS }),
         });
         return;
       }
-      
+
       // Firebase Storage에 이미지 업로드
       const downloadUrl = await uploadImageToStorage(imageUrl, 'closet');
-      
+
       // Firestore에 메타데이터 저장
       await firestore()
         .collection('users')
@@ -293,22 +343,22 @@ const VirtualFittingScreen = () => {
           category: category,
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
-      
-      Toast.show({type: 'success', text1: '옷장에 추가되었습니다!'});
+
+      Toast.show({ type: 'success', text1: t('addedToCloset') });
       setSelectedClothingImages([downloadUrl]); // 저장 후 바로 선택 상태로
     } catch (error) {
       console.error('옷장 저장 실패:', error);
       Toast.show({
         type: 'error',
-        text1: '오류',
-        text2: '옷장에 저장하는 데 실패했습니다.',
+        text1: t('error'),
+        text2: t('closetSaveError'),
       });
     }
   };
 
   // 갤러리에서 새 옷을 선택하고 저장하는 함수
   const handleSelectClothing = async () => {
-    const result = await launchImageLibrary({mediaType: 'photo'});
+    const result = await launchImageLibrary({ mediaType: 'photo' });
     if (result.assets && result.assets[0].uri) {
       const newClothingUrl = result.assets[0].uri;
 
@@ -320,7 +370,7 @@ const VirtualFittingScreen = () => {
         {
           options,
           cancelButtonIndex,
-          title: '이 옷을 어떤 카테고리에 저장할까요?',
+          title: t('selectCategoryTitle'),
         },
         (selectedIndex?: number) => {
           if (
@@ -337,36 +387,36 @@ const VirtualFittingScreen = () => {
   };
 
   // 일일 사용 횟수 확인 및 관리 함수
-  const checkDailyUsage = async (): Promise<{canUse: boolean; remainingCount: number}> => {
+  const checkDailyUsage = async (): Promise<{ canUse: boolean; remainingCount: number }> => {
     try {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 형식
       const storageKey = 'virtualFittingDailyUsage';
       const storedData = await AsyncStorage.getItem(storageKey);
-      
+
       if (!storedData) {
         // 저장된 데이터가 없으면 오늘 처음 사용
-        await AsyncStorage.setItem(storageKey, JSON.stringify({date: today, count: 0}));
-        return {canUse: true, remainingCount: MAX_DAILY_FITTING};
+        await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: 0 }));
+        return { canUse: true, remainingCount: MAX_DAILY_FITTING };
       }
-      
-      const {date, count} = JSON.parse(storedData);
-      
+
+      const { date, count } = JSON.parse(storedData);
+
       // 날짜가 다르면 리셋 (새로운 하루)
       if (date !== today) {
-        await AsyncStorage.setItem(storageKey, JSON.stringify({date: today, count: 0}));
-        return {canUse: true, remainingCount: MAX_DAILY_FITTING};
+        await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: 0 }));
+        return { canUse: true, remainingCount: MAX_DAILY_FITTING };
       }
-      
+
       // 오늘 날짜이고 사용 횟수 확인
       if (count >= MAX_DAILY_FITTING) {
-        return {canUse: false, remainingCount: 0};
+        return { canUse: false, remainingCount: 0 };
       }
-      
-      return {canUse: true, remainingCount: MAX_DAILY_FITTING - count};
+
+      return { canUse: true, remainingCount: MAX_DAILY_FITTING - count };
     } catch (error) {
       console.error('일일 사용 횟수 확인 실패:', error);
       // 에러 발생 시 사용 허용 (서비스 중단 방지)
-      return {canUse: true, remainingCount: MAX_DAILY_FITTING};
+      return { canUse: true, remainingCount: MAX_DAILY_FITTING };
     }
   };
 
@@ -376,47 +426,79 @@ const VirtualFittingScreen = () => {
       const today = new Date().toISOString().split('T')[0];
       const storageKey = 'virtualFittingDailyUsage';
       const storedData = await AsyncStorage.getItem(storageKey);
-      
+
       if (!storedData) {
-        await AsyncStorage.setItem(storageKey, JSON.stringify({date: today, count: 1}));
+        await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: 1 }));
         return;
       }
-      
-      const {date, count} = JSON.parse(storedData);
-      
+
+      const { date, count } = JSON.parse(storedData);
+
       // 날짜가 다르면 새로 시작
       if (date !== today) {
-        await AsyncStorage.setItem(storageKey, JSON.stringify({date: today, count: 1}));
+        await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: 1 }));
         return;
       }
-      
+
       // 오늘 날짜면 횟수 증가
-      await AsyncStorage.setItem(storageKey, JSON.stringify({date: today, count: count + 1}));
+      await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: count + 1 }));
     } catch (error) {
       console.error('일일 사용 횟수 증가 실패:', error);
+    }
+  };
+
+  // 일일 사용 횟수 차감 함수 (보상 지급용)
+  const decreaseDailyUsageCount = async (): Promise<void> => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const storageKey = 'virtualFittingDailyUsage';
+      const storedData = await AsyncStorage.getItem(storageKey);
+
+      if (storedData) {
+        const { date, count } = JSON.parse(storedData);
+        if (date === today && count > 0) {
+          await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: count - 1 }));
+        }
+      }
+    } catch (error) {
+      console.error('일일 사용 횟수 차감 실패:', error);
     }
   };
 
   // '피팅 시작' 버튼을 눌렀을 때 실행될 함수
   const handleTryOn = async () => {
     if (!personImage || selectedClothingImages.length === 0) {
-      Alert.alert('알림', '먼저 사람과 의류 이미지를 모두 선택해주세요.');
+      Alert.alert(t('selectionLimitTitle'), t('selectPersonAndClothing'));
       return;
     }
 
     // 일일 사용 횟수 확인
-    const {canUse, remainingCount: currentRemaining} = await checkDailyUsage();
+    const { canUse, remainingCount: currentRemaining } = await checkDailyUsage();
     if (!canUse) {
       setRemainingCount(0);
+      // Alert.alert(
+      //   '일일 무료 횟수 소진',
+      //   `하루 최대 ${MAX_DAILY_FITTING}회 무료 피팅을 모두 사용하셨습니다.\n광고를 보고 1회 충전하시겠습니까?`,
+      //   [
+      //     { text: '취소', style: 'cancel' },
+      //     {
+      //       text: '광고 보고 충전 🎥',
+      //       onPress: () => showRewardAd(),
+      //       style: 'default'
+      //     }
+      //   ]
+      // );
       Alert.alert(
-        '일일 사용 한도 초과',
-        `하루 최대 ${MAX_DAILY_FITTING}회까지 사용할 수 있습니다.\n내일 다시 시도해주세요.`,
-        [{text: '확인', style: 'default'}]
+        t('dailyLimitExceededTitle'),
+        t('dailyLimitExceededMessage', { max: MAX_DAILY_FITTING }),
+        [
+          { text: t('confirm'), style: 'cancel' }
+        ]
       );
       return;
     }
     setRemainingCount(currentRemaining);
-    
+
     // 피팅 시작 시 내 옷장 패널 접기
     setIsPanelExpanded(false);
     RNAnimated.timing(slideUpAnim, {
@@ -424,7 +506,7 @@ const VirtualFittingScreen = () => {
       duration: 300,
       useNativeDriver: true,
     }).start();
-    
+
     setIsProcessing(true);
     setResultImage(null);
 
@@ -434,7 +516,7 @@ const VirtualFittingScreen = () => {
       name: 'person.jpg',
       type: 'image/jpeg',
     });
-    
+
     // 모든 선택된 옷 이미지를 전송 (서버에서 다중 옷 이미지 지원)
     selectedClothingImages.forEach((clothingUrl, index) => {
       formData.append('clothing', {
@@ -443,7 +525,7 @@ const VirtualFittingScreen = () => {
         type: 'image/jpeg',
       });
     });
-    
+
     // 옷 개수 정보도 함께 전송
     formData.append('clothing_count', selectedClothingImages.length.toString());
 
@@ -454,7 +536,7 @@ const VirtualFittingScreen = () => {
           // 🚨 IP 주소 확인
           method: 'POST',
           body: formData,
-          headers: {'Content-Type': 'multipart/form-data'},
+          headers: { 'Content-Type': 'multipart/form-data' },
         },
       );
       const result = await response.json();
@@ -462,11 +544,11 @@ const VirtualFittingScreen = () => {
         // 이미지 합성 성공 시 일일 사용 횟수 증가
         await incrementDailyUsage();
         // 남은 횟수 업데이트
-        const {remainingCount: newRemaining} = await checkDailyUsage();
+        const { remainingCount: newRemaining } = await checkDailyUsage();
         setRemainingCount(newRemaining);
-        
+
         setResultImage(result.imageUrl);
-        Toast.show({type: 'success', text1: '이미지 합성이 완료되었습니다.'});
+        Toast.show({ type: 'success', text1: t('fittingComplete') });
         if (user) {
           // 기존 recentResults에도 저장 (호환성 유지)
           firestore()
@@ -477,7 +559,7 @@ const VirtualFittingScreen = () => {
               imageUrl: result.imageUrl,
               createdAt: firestore.FieldValue.serverTimestamp(),
             });
-          
+
           // 새로운 Recent Codi 컬렉션에도 저장
           firestore()
             .collection('users')
@@ -495,8 +577,8 @@ const VirtualFittingScreen = () => {
     } catch (error) {
       Toast.show({
         type: 'error',
-        text1: '오류',
-        text2: '이미지 합성에 실패했습니다.',
+        text1: t('error'),
+        text2: t('fittingFailed'),
       });
     } finally {
       setIsProcessing(false);
@@ -510,27 +592,27 @@ const VirtualFittingScreen = () => {
         // iOS: 명시적으로 권한 요청
         const permission = PERMISSIONS.IOS.PHOTO_LIBRARY_ADD_ONLY;
         const checkResult = await check(permission);
-        
+
         if (checkResult === RESULTS.GRANTED || checkResult === RESULTS.LIMITED) {
           return true;
         }
-        
+
         const requestResult = await request(permission);
-        
+
         if (requestResult === RESULTS.GRANTED || requestResult === RESULTS.LIMITED) {
           return true;
         }
-        
+
         if (requestResult === RESULTS.BLOCKED || checkResult === RESULTS.BLOCKED) {
           Alert.alert(
-            '권한 필요',
-            '이미지를 저장하려면 사진 라이브러리 접근 권한이 필요합니다.\n설정에서 권한을 허용해주세요.',
+            t('permissionRequired'),
+            t('photoPermissionMessage'),
             [
               {
-                text: '설정 열기',
+                text: t('openSettings'),
                 onPress: () => openSettings(),
               },
-              {text: '취소', style: 'cancel'},
+              { text: t('cancel'), style: 'cancel' },
             ],
           );
         }
@@ -547,13 +629,12 @@ const VirtualFittingScreen = () => {
     }
   };
 
-  // 결과 이미지를 다운로드하는 함수 (워터마크 포함)
+  // 결과 이미지를 다운로드/공유하는 함수
   const handleDownloadImage = async () => {
     if (!resultImage) {
       return;
     }
 
-    // 권한 체크 및 요청
     const hasPermission = await checkAndRequestPermission();
     if (!hasPermission) {
       return;
@@ -561,57 +642,76 @@ const VirtualFittingScreen = () => {
 
     let localFile: string | null = null;
     try {
-      // 워터마크가 포함된 이미지 캡처
-      if (resultImageRef.current) {
-        // 워터마크를 임시로 표시하고 캡처
-        setIsCapturing(true);
-        // 워터마크가 렌더링될 시간을 주기 위해 약간의 딜레이
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        const uri = await captureRef(resultImageRef.current, {
-          format: 'jpg',
-          quality: 0.9,
+      // ✅ [수정] 원본 이미지 비율 유지를 위해 캡처 대신 원본 다운로드 사용
+      const useCapture = false; // Platform.OS === 'android' && resultImageRef.current;
+
+      if (useCapture) {
+        try {
+          setIsCapturing(true);
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          if (!resultImageRef.current) {
+            throw new Error('이미지 참조가 유효하지 않습니다.');
+          }
+
+          const uri = await captureRef(resultImageRef.current, {
+            format: 'jpg',
+            quality: 0.9,
+          });
+
+          setIsCapturing(false);
+          await CameraRoll.save(uri, { type: 'photo' });
+          Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
+          return;
+        } catch (captureError) {
+          console.error('이미지 캡처 실패:', captureError);
+          setIsCapturing(false);
+          // 캡처 실패 시 원본 다운로드로 fallback
+        }
+      }
+
+      localFile = `${RNFS.CachesDirectoryPath}/${Date.now()}_result.jpeg`;
+      await RNFS.downloadFile({ fromUrl: resultImage, toFile: localFile }).promise;
+
+      if (Platform.OS === 'ios') {
+        await Share.share({
+          url: `file://${localFile}`,
         });
-        
-        setIsCapturing(false);
-        
-        await CameraRoll.save(uri, {type: 'photo'});
-        Toast.show({type: 'success', text1: '이미지를 갤러리에 저장했습니다.'});
+        Toast.show({ type: 'success', text1: t('imageShared') });
       } else {
-        // 캡처 실패 시 원본 이미지 다운로드
-        localFile = `${RNFS.CachesDirectoryPath}/${Date.now()}_result.jpeg`;
-        await RNFS.downloadFile({fromUrl: resultImage, toFile: localFile})
-          .promise;
-        await CameraRoll.save(`file://${localFile}`, {type: 'photo'});
-        Toast.show({type: 'success', text1: '이미지를 갤러리에 저장했습니다.'});
+        // Android에서는 기본 Share로 이미지 공유가 제한적일 수 있으므로 갤러리 저장만 우선 수행
+        await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
+        Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
       }
     } catch (error: any) {
       console.error('저장 실패:', error);
-      // Android에서 권한 관련 에러인 경우
-      if (Platform.OS === 'android' && (error?.message?.includes('permission') || error?.code === 'E_PERMISSION_MISSING')) {
+      if (error?.message?.includes('permission') || error?.code === 'E_PERMISSION_MISSING' || error?.code === 'E_PERMISSION_DENIED') {
         Alert.alert(
-          '권한 필요',
-          '이미지를 저장하려면 사진 라이브러리 접근 권한이 필요합니다.\n설정에서 권한을 허용해주세요.',
+          t('permissionRequired'),
+          t('photoPermissionMessage'),
           [
             {
-              text: '설정 열기',
+              text: t('openSettings'),
               onPress: () => openSettings(),
             },
-            {text: '취소', style: 'cancel'},
+            { text: t('cancel'), style: 'cancel' },
           ],
         );
       } else {
         Toast.show({
           type: 'error',
-          text1: '저장 실패',
-          text2: '이미지를 저장하는 데 실패했습니다.',
+          text1: t('saveFailed'),
+          text2: error?.message || t('saveImageFailed'),
         });
       }
     } finally {
+      setIsCapturing(false);
       if (localFile) {
-        await RNFS.unlink(localFile).catch(err =>
-          console.error('임시 파일 삭제 실패', err),
-        );
+        try {
+          await RNFS.unlink(localFile);
+        } catch (err) {
+          console.error('임시 파일 삭제 실패', err);
+        }
       }
     }
   };
@@ -627,8 +727,8 @@ const VirtualFittingScreen = () => {
         if (prev.length >= MAX_CLOTHING_SELECTION) {
           Toast.show({
             type: 'info',
-            text1: '선택 제한',
-            text2: `최대 ${MAX_CLOTHING_SELECTION}개의 옷만 선택할 수 있습니다.`,
+            text1: t('selectionLimitTitle'),
+            text2: t('selectionLimitMessage', { max: MAX_CLOTHING_SELECTION }),
           });
           return prev;
         }
@@ -684,8 +784,8 @@ const VirtualFittingScreen = () => {
   // 드래그 핸들러
   const onHandlerStateChange = (event: any) => {
     if (event.nativeEvent.state === State.END) {
-      const {translationY, velocityY} = event.nativeEvent;
-      
+      const { translationY, velocityY } = event.nativeEvent;
+
       // 드래그 방향과 속도에 따라 패널 상태 결정
       if (translationY > 50 || velocityY > 500) {
         // 아래로 드래그하면 패널 닫기
@@ -717,7 +817,7 @@ const VirtualFittingScreen = () => {
               source={require('../assets/animations/Bubbles.json')}
               autoPlay
               loop
-              style={{width: 300, height: 300}}
+              style={{ width: 300, height: 300 }}
             />
             <Text style={styles.processingText}>최신 AI 기술로 코디 진행 중...</Text>
           </View>
@@ -725,9 +825,9 @@ const VirtualFittingScreen = () => {
           <View style={styles.resultContainer}>
             <View ref={resultImageRef} collapsable={false} style={styles.captureContainer}>
               <RNAnimated.Image
-                source={{uri: resultImage}}
-                style={[styles.mainImage, {opacity: fadeAnim}]}
-                resizeMode="cover"
+                source={{ uri: resultImage }}
+                style={[styles.mainImage, { opacity: fadeAnim }]}
+                resizeMode="contain"
               />
               {/* 워터마크 이미지 - 캡처할 때만 표시됨 */}
               {isCapturing && (
@@ -743,9 +843,9 @@ const VirtualFittingScreen = () => {
           </View>
         ) : personImage ? (
           <Image
-            source={{uri: personImage}}
+            source={{ uri: personImage }}
             style={styles.mainImage}
-            resizeMode="cover"
+            resizeMode="contain"
           />
         ) : (
           <TouchableOpacity
@@ -756,7 +856,7 @@ const VirtualFittingScreen = () => {
             </Text>
           </TouchableOpacity>
         )}
-        
+
         {/* 사람 변경 버튼 - 합성 결과가 아닐 때만 표시 */}
         {!resultImage && (
           <TouchableOpacity
@@ -768,54 +868,61 @@ const VirtualFittingScreen = () => {
 
         {/* 피팅 버튼들 */}
         {resultImage ? (
-          <View style={styles.resultButtonContainer}>
-            <TouchableOpacity 
-              style={styles.newTryOnButtonLeft} 
+          <>
+            <TouchableOpacity
+              style={styles.changePersonButton}
               onPress={() => {
                 setResultImage(null);
-                setPersonImage(null);
+                // setPersonImage(null); // ❌ 기존 사람 이미지 유지
                 setSelectedClothingImages([]);
-                slideUpAnim.setValue(0);
+                // slideUpAnim.setValue(0); // 패널 애니메이션 초기화 불필요 (사람 이미지가 있으므로)
+                setIsPanelExpanded(true); // 옷장 패널 다시 열기
+                RNAnimated.timing(slideUpAnim, {
+                  toValue: 1,
+                  duration: 300,
+                  useNativeDriver: true,
+                }).start();
               }}>
-              <Text style={styles.newTryOnButtonText}>새 피팅 시작 🔄</Text>
+              <Text style={styles.changePersonText}>다시 입어보기 🔄</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleDownloadImage}
               activeOpacity={0.8}
-              style={styles.downloadButtonContainer}>
+              style={styles.downloadButtonWrapper}>
               <LinearGradient
                 colors={['#FF6B9D', '#8B5CF6']}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 0}}
-                style={styles.downloadButton}>
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.downloadButtonGradient}>
                 <Text style={styles.downloadButtonText}>📥 다운로드</Text>
               </LinearGradient>
             </TouchableOpacity>
-          </View>
+          </>
         ) : (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleTryOn}
             activeOpacity={0.8}
             style={styles.tryOnButtonContainer}>
             <LinearGradient
               colors={['#FF6B9D', '#8B5CF6']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
               style={styles.tryOnButton}>
-              <Text style={styles.tryOnButtonText}>
-                피팅 시작 ({selectedClothingImages.length}개 선택)
-                {'\n'}
+              <View style={styles.tryOnButtonContent}>
+                <Text style={styles.tryOnButtonText}>
+                  피팅 시작 ({selectedClothingImages.length}개 선택)
+                </Text>
                 <Text style={styles.remainingCountText}>
                   남은 횟수: {remainingCount}회 (매일 {MAX_DAILY_FITTING}회 무료)
                 </Text>
-              </Text>
+              </View>
             </LinearGradient>
           </TouchableOpacity>
         )}
       </View>
 
       {/* 하단 옷장 영역 - 드래그 가능한 패널 */}
-      <RNAnimated.View 
+      <RNAnimated.View
         style={[
           styles.closetPanel,
           {
@@ -863,91 +970,91 @@ const VirtualFittingScreen = () => {
         {/* 옷 아이템 리스트 - 조건부 렌더링 */}
         {isPanelExpanded && (
           <>
-          {loadingCloset ? (
-            <ActivityIndicator style={{marginTop: 20}} />
-          ) : (
-            <FlatList
-              data={gridItems}
-              numColumns={5}
-              scrollEnabled={true}
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled={true}
-              keyExtractor={(item, index) => item.isAddButton ? 'add-button' : item.id}
-              contentContainerStyle={[
-                styles.clothingGridContainer,
-                {flexGrow: 0, paddingTop: 5, paddingBottom: 5}, // 필요한 만큼만 공간 차지
-              ]}
-              renderItem={({item, index}) => {
-                // 첫 번째 아이템 (추가 버튼)
-                if (item.isAddButton) {
-                  const isClosetFull = closetItems.length >= MAX_CLOSET_ITEMS;
+            {loadingCloset ? (
+              <ActivityIndicator style={{ marginTop: 20 }} />
+            ) : (
+              <FlatList
+                data={gridItems}
+                numColumns={5}
+                scrollEnabled={true}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
+                keyExtractor={(item, index) => item.isAddButton ? 'add-button' : item.id}
+                contentContainerStyle={[
+                  styles.clothingGridContainer,
+                  { flexGrow: 0, paddingTop: 5, paddingBottom: 5 }, // 필요한 만큼만 공간 차지
+                ]}
+                renderItem={({ item, index }) => {
+                  // 첫 번째 아이템 (추가 버튼)
+                  if (item.isAddButton) {
+                    const isClosetFull = closetItems.length >= MAX_CLOSET_ITEMS;
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.addClothingButton,
+                          isClosetFull && styles.disabledAddClothingButton
+                        ]}
+                        onPress={isClosetFull ? undefined : handleSelectClothing}
+                        disabled={isClosetFull}>
+                        <Text style={[
+                          styles.addClothingButtonText,
+                          isClosetFull && styles.disabledAddClothingButtonText
+                        ]}>
+                          {isClosetFull ? '30/30' : '+'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  }
+
+                  // 이미지 아이템
+                  if (!item.imageUrl) return null;
+
+                  const isSelected = selectedClothingImages.includes(item.imageUrl);
+                  const canSelect = !isSelected && selectedClothingImages.length < MAX_CLOTHING_SELECTION;
+
                   return (
                     <TouchableOpacity
+                      onPress={() => handleItemSelect(item.imageUrl!)}
                       style={[
-                        styles.addClothingButton,
-                        isClosetFull && styles.disabledAddClothingButton
-                      ]}
-                      onPress={isClosetFull ? undefined : handleSelectClothing}
-                      disabled={isClosetFull}>
-                      <Text style={[
-                        styles.addClothingButtonText,
-                        isClosetFull && styles.disabledAddClothingButtonText
+                        styles.clothingItemContainer,
+                        !canSelect && !isSelected && styles.disabledClothingItem,
                       ]}>
-                        {isClosetFull ? '30/30' : '+'}
-                      </Text>
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={[
+                          styles.clothingItem,
+                          isSelected && styles.selectedClothingItem,
+                        ]}
+                        resizeMode="contain"
+                        onLoadStart={() =>
+                          setImageLoading(prev => ({ ...prev, [item.id]: true }))
+                        }
+                        onLoadEnd={() =>
+                          setImageLoading(prev => ({ ...prev, [item.id]: false }))
+                        }
+                      />
+                      {imageLoading[item.id] && (
+                        <ActivityIndicator
+                          style={StyleSheet.absoluteFill}
+                          size="small"
+                          color="#6A0DAD"
+                        />
+                      )}
+                      {isSelected && (
+                        <View style={styles.selectedIndicator}>
+                          <Text style={styles.selectedIndicatorText}>✓</Text>
+                        </View>
+                      )}
+                      {!canSelect && !isSelected && (
+                        <View style={styles.disabledOverlay}>
+                          <Text style={styles.disabledText}>최대 2개</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
-                }
-                
-                // 이미지 아이템
-                if (!item.imageUrl) return null;
-                
-                const isSelected = selectedClothingImages.includes(item.imageUrl);
-                const canSelect = !isSelected && selectedClothingImages.length < MAX_CLOTHING_SELECTION;
-                
-                return (
-                  <TouchableOpacity
-                    onPress={() => handleItemSelect(item.imageUrl!)}
-                    style={[
-                      styles.clothingItemContainer,
-                      !canSelect && !isSelected && styles.disabledClothingItem,
-                    ]}>
-                    <Image
-                      source={{uri: item.imageUrl}}
-                      style={[
-                        styles.clothingItem,
-                        isSelected && styles.selectedClothingItem,
-                      ]}
-                      resizeMode="cover"
-                      onLoadStart={() =>
-                        setImageLoading(prev => ({...prev, [item.id]: true}))
-                      }
-                      onLoadEnd={() =>
-                        setImageLoading(prev => ({...prev, [item.id]: false}))
-                      }
-                    />
-                    {imageLoading[item.id] && (
-                      <ActivityIndicator
-                        style={StyleSheet.absoluteFill}
-                        size="small"
-                        color="#6A0DAD"
-                      />
-                    )}
-                    {isSelected && (
-                      <View style={styles.selectedIndicator}>
-                        <Text style={styles.selectedIndicatorText}>✓</Text>
-                      </View>
-                    )}
-                    {!canSelect && !isSelected && (
-                      <View style={styles.disabledOverlay}>
-                        <Text style={styles.disabledText}>최대 2개</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          )}
+                }}
+              />
+            )}
           </>
         )}
       </RNAnimated.View>
@@ -957,21 +1064,10 @@ const VirtualFittingScreen = () => {
         <View style={styles.workthroughOverlay}>
           {/* 어두운 배경 */}
           <View style={styles.workthroughBackdrop} />
-          
+
           {/* 단계 1: 사람 변경 버튼 하이라이트 */}
           {workthroughStep === WorkthroughStep.SELECT_PERSON && (
             <View style={styles.workthroughContent}>
-              <View
-                style={[
-                  styles.workthroughHighlight,
-                  {
-                    top: 50,
-                    left: 20,
-                    width: 140,
-                    height: 50,
-                  },
-                ]}
-              />
               <View style={styles.workthroughTooltip}>
                 <Text style={styles.workthroughTitle}>
                   👤 1단계: 사람 이미지 선택
@@ -993,7 +1089,7 @@ const VirtualFittingScreen = () => {
           {/* 단계 2: 옷장 아이템 하이라이트 */}
           {workthroughStep === WorkthroughStep.SELECT_CLOTHING && (
             <View style={styles.workthroughContent}>
-              <View style={[styles.workthroughTooltip, {bottom: 250}]}>
+              <View style={[styles.workthroughTooltip, { bottom: 250 }]}>
                 <Text style={styles.workthroughTitle}>
                   👕 2단계: 옷 선택
                 </Text>
@@ -1013,17 +1109,6 @@ const VirtualFittingScreen = () => {
           {/* 단계 3: 피팅 시작 버튼 하이라이트 */}
           {workthroughStep === WorkthroughStep.START_FITTING && (
             <View style={styles.workthroughContent}>
-              <View
-                style={[
-                  styles.workthroughHighlight,
-                  {
-                    top: 50,
-                    right: 20,
-                    width: 200,
-                    height: 50,
-                  },
-                ]}
-              />
               <View style={styles.workthroughTooltip}>
                 <Text style={styles.workthroughTitle}>
                   🚀 3단계: 피팅 시작
@@ -1118,8 +1203,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
@@ -1134,18 +1220,31 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     right: 20,
+    minWidth: 220,
+    maxWidth: 280,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    borderRadius: 20,
   },
   tryOnButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 13,
     borderRadius: 20,
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 58,
+    width: '100%',
     shadowColor: '#8B5CF6',
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+  },
+  tryOnButtonContent: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
   },
   tryOnButtonText: {
     color: 'white',
@@ -1153,81 +1252,43 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: -0.3,
     textAlign: 'center',
+    lineHeight: 20,
+    width: '100%',
   },
   remainingCountText: {
     color: 'white',
     fontWeight: '500',
     fontSize: 12,
     opacity: 0.9,
-  },
-  newTryOnButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  newTryOnButtonText: {
-    color: '#333',
-    fontWeight: '700',
-    fontSize: 15,
-    letterSpacing: -0.3,
-  },
-  resultButtonContainer: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  newTryOnButtonLeft: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 130,
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  downloadButtonContainer: {
-    // 컨테이너 스타일은 없음 (resultButtonContainer 내부 위치)
-  },
-  downloadButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 130,
-    justifyContent: 'center',
-    shadowColor: '#8B5CF6',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    textAlign: 'center',
+    lineHeight: 16,
+    marginTop: 4,
+    width: '100%',
   },
   downloadButtonText: {
     color: 'white',
     fontWeight: '700',
     fontSize: 15,
     letterSpacing: -0.3,
+  },
+  downloadButtonWrapper: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    borderRadius: 20,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  downloadButtonGradient: {
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // 하단 옷장 패널
   closetPanel: {
@@ -1240,7 +1301,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: -2},
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
@@ -1400,19 +1461,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  workthroughHighlight: {
-    position: 'absolute',
-    backgroundColor: 'transparent',
-    borderWidth: 3,
-    borderColor: '#6A0DAD',
-    borderRadius: 12,
-    shadowColor: '#6A0DAD',
-    shadowOffset: {width: 0, height: 0},
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 10,
-    zIndex: 1001,
-  },
   workthroughTooltip: {
     position: 'absolute',
     backgroundColor: '#FFFFFF',
@@ -1421,7 +1469,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     maxWidth: '90%',
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 10,
@@ -1448,7 +1496,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     shadowColor: '#6A0DAD',
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,

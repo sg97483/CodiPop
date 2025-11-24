@@ -9,6 +9,7 @@ import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BootSplash from 'react-native-bootsplash';
+import firebase from '@react-native-firebase/app';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import LottieView from 'lottie-react-native';
@@ -101,7 +102,7 @@ function App(): React.JSX.Element | null {
       }
     });
     return subscriber; // cleanup on unmount
-  }, [initializing]); // ✅ [수정] 의존성 배열에 initializing 추가하여 경고 해결
+  }, [initializing]); // 컴포넌트 마운트 시 Firebase Auth 상태 구독
 
   // ✅ 2. 첫 실행 여부 확인 전용 useEffect
   useEffect(() => {

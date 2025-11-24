@@ -1,6 +1,6 @@
 // src/screens/ProfileScreen.tsx
 
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   SafeAreaView,
   View,
@@ -10,15 +10,21 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
+import { useTranslation } from 'react-i18next';
 
 const ProfileScreen = () => {
   const user = auth().currentUser;
   const insets = useSafeAreaInsets();
   const [isDeleting, setIsDeleting] = useState(false);
+  const { t, i18n } = useTranslation();
+
+  const changeLanguage = (lang: string) => {
+    i18n.changeLanguage(lang);
+  };
 
   const handleLogout = async () => {
     try {
@@ -83,7 +89,7 @@ const ProfileScreen = () => {
         .doc(userId)
         .collection('closet')
         .get();
-      
+
       const closetDeletePromises = closetSnapshot.docs.map(doc => doc.ref.delete());
       await Promise.all(closetDeletePromises);
 
@@ -93,7 +99,7 @@ const ProfileScreen = () => {
         .doc(userId)
         .collection('recentResults')
         .get();
-      
+
       const recentResultsDeletePromises = recentResultsSnapshot.docs.map(doc => doc.ref.delete());
       await Promise.all(recentResultsDeletePromises);
 
@@ -103,7 +109,7 @@ const ProfileScreen = () => {
         .doc(userId)
         .collection('recentCodi')
         .get();
-      
+
       const recentCodiDeletePromises = recentCodiSnapshot.docs.map(doc => doc.ref.delete());
       await Promise.all(recentCodiDeletePromises);
 
@@ -111,10 +117,10 @@ const ProfileScreen = () => {
       try {
         const storageRef = storage().ref(`users/${userId}`);
         const listResult = await storageRef.listAll();
-        
+
         const deletePromises = listResult.items.map(item => item.delete());
         await Promise.all(deletePromises);
-        
+
         // 폴더 자체도 삭제 시도 (가능한 경우)
         try {
           await storageRef.delete();
@@ -133,19 +139,19 @@ const ProfileScreen = () => {
       Alert.alert(
         '탈퇴 완료',
         '회원 탈퇴가 완료되었습니다.\n이용해 주셔서 감사합니다.',
-        [{text: '확인', onPress: () => {}}],
+        [{ text: '확인', onPress: () => { } }],
       );
     } catch (error: any) {
       console.error('회원 탈퇴 오류:', error);
-      
+
       let errorMessage = '회원 탈퇴 중 문제가 발생했습니다.';
-      
+
       if (error.code === 'auth/requires-recent-login') {
         errorMessage = '보안을 위해 다시 로그인한 후 탈퇴를 진행해주세요.';
       } else if (error.code === 'auth/network-request-failed') {
         errorMessage = '네트워크 연결을 확인해주세요.';
       }
-      
+
       Alert.alert('오류', errorMessage);
     } finally {
       setIsDeleting(false);
@@ -163,22 +169,56 @@ const ProfileScreen = () => {
         </Text>
       </View>
 
+      <View style={styles.profileInfoContainer}>
+        <Text style={styles.infoLabel}>{t('languageSettings')}</Text>
+        <View style={styles.languageButtonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.languageButton,
+              i18n.language === 'ko' && styles.activeLanguageButton,
+            ]}
+            onPress={() => changeLanguage('ko')}>
+            <Text
+              style={[
+                styles.languageButtonText,
+                i18n.language === 'ko' && styles.activeLanguageButtonText,
+              ]}>
+              {t('korean')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.languageButton,
+              i18n.language === 'en' && styles.activeLanguageButton,
+            ]}
+            onPress={() => changeLanguage('en')}>
+            <Text
+              style={[
+                styles.languageButtonText,
+                i18n.language === 'en' && styles.activeLanguageButtonText,
+              ]}>
+              {t('english')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {isDeleting ? (
-        <View style={[styles.loadingContainer, {marginBottom: insets.bottom + 20}]}>
+        <View style={[styles.loadingContainer, { marginBottom: insets.bottom + 20 }]}>
           <ActivityIndicator size="large" color="#FF6B9D" />
           <Text style={styles.loadingText}>계정 삭제 중...</Text>
         </View>
       ) : (
         <>
-          <TouchableOpacity 
-            style={[styles.logoutButton, {marginTop: 40}]} 
+          <TouchableOpacity
+            style={[styles.logoutButton, { marginTop: 40 }]}
             onPress={handleLogout}
             disabled={isDeleting}>
             <Text style={styles.logoutButtonText}>로그아웃</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.deleteAccountButton, {marginBottom: insets.bottom + 20}]} 
+          <TouchableOpacity
+            style={[styles.deleteAccountButton, { marginBottom: insets.bottom + 20 }]}
             onPress={handleDeleteAccount}
             disabled={isDeleting}>
             <Text style={styles.deleteAccountButtonText}>회원 탈퇴</Text>
@@ -249,6 +289,33 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#666',
+  },
+  languageButtonContainer: {
+    flexDirection: 'row',
+    marginTop: 10,
+    gap: 10,
+  },
+  languageButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  activeLanguageButton: {
+    backgroundColor: '#FF6B9D',
+    borderColor: '#FF6B9D',
+  },
+  languageButtonText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  activeLanguageButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });
 

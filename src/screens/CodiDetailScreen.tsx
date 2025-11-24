@@ -1,6 +1,6 @@
 // src/screens/CodiDetailScreen.tsx
 
-import React, {useState, useEffect, useRef} from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -12,21 +12,24 @@ import {
   Alert,
   Dimensions,
   StatusBar,
+  InteractionManager,
+  Share,
 } from 'react-native';
-import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
-import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
-import {CameraRoll} from '@react-native-camera-roll/camera-roll';
+import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import RNFS from 'react-native-fs';
 import Toast from 'react-native-toast-message';
-import {Platform, Linking} from 'react-native';
-import {check, request, PERMISSIONS, RESULTS, openSettings, Permission} from 'react-native-permissions';
-import {captureRef} from 'react-native-view-shot';
+import { Platform, Linking } from 'react-native';
+import { check, request, PERMISSIONS, RESULTS, openSettings, Permission } from 'react-native-permissions';
+import { captureRef } from 'react-native-view-shot';
+import { useTranslation } from 'react-i18next';
 
-const {width: screenWidth, height: screenHeight} = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 type CodiDetailScreenRouteProp = RouteProp<{
   CodiDetail: {
@@ -41,11 +44,12 @@ type CodiDetailScreenNavigationProp = NativeStackNavigationProp<any>;
 
 const CodiDetailScreen = () => {
   const navigation = useNavigation<CodiDetailScreenNavigationProp>();
+  const { t } = useTranslation();
   const route = useRoute<CodiDetailScreenRouteProp>();
   const user = auth().currentUser;
   const insets = useSafeAreaInsets();
 
-  const {codiId, imageUrl, createdAt, isLiked} = route.params;
+  const { codiId, imageUrl, createdAt, isLiked } = route.params;
   const [loading, setLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [currentIsLiked, setCurrentIsLiked] = useState(isLiked || false);
@@ -83,15 +87,15 @@ const CodiDetailScreen = () => {
         .update({
           isLiked: !currentIsLiked,
         });
-      
+
       Toast.show({
         type: 'success',
-        text1: currentIsLiked ? '찜 해제됨' : '찜 추가됨',
+        text1: currentIsLiked ? t('likeRemoved') : t('likeAdded'),
       });
     } catch (error) {
       console.error('좋아요 상태 업데이트 실패:', error);
       setCurrentIsLiked(currentIsLiked); // 실패 시 원래 상태로 복원
-      Alert.alert('오류', '좋아요 상태를 업데이트하는 중 문제가 발생했습니다.');
+      Alert.alert(t('error'), t('likeUpdateError'));
     }
   };
 
@@ -102,27 +106,27 @@ const CodiDetailScreen = () => {
         // iOS: 명시적으로 권한 요청
         const permission = PERMISSIONS.IOS.PHOTO_LIBRARY_ADD_ONLY;
         const checkResult = await check(permission);
-        
+
         if (checkResult === RESULTS.GRANTED || checkResult === RESULTS.LIMITED) {
           return true;
         }
-        
+
         const requestResult = await request(permission);
-        
+
         if (requestResult === RESULTS.GRANTED || requestResult === RESULTS.LIMITED) {
           return true;
         }
-        
+
         if (requestResult === RESULTS.BLOCKED || checkResult === RESULTS.BLOCKED) {
           Alert.alert(
-            '권한 필요',
-            '이미지를 저장하려면 사진 라이브러리 접근 권한이 필요합니다.\n설정에서 권한을 허용해주세요.',
+            t('permissionRequired'),
+            t('photoPermissionMessage'),
             [
               {
-                text: '설정 열기',
+                text: t('openSettings'),
                 onPress: () => openSettings(),
               },
-              {text: '취소', style: 'cancel'},
+              { text: t('cancel'), style: 'cancel' },
             ],
           );
         }
@@ -141,87 +145,175 @@ const CodiDetailScreen = () => {
 
   // 이미지 다운로드 함수
   const handleDownload = async () => {
-    if (!imageUrl) return;
+    console.log('📥 [다운로드 시작] handleDownload 호출됨');
+
+    if (!imageUrl) {
+      console.error('❌ [다운로드 실패] imageUrl이 없습니다');
+      return;
+    }
+
+    console.log('📥 [다운로드] imageUrl:', imageUrl);
 
     // iOS는 권한 체크, Android는 바로 시도 (CameraRoll.save가 자체 처리)
     if (Platform.OS === 'ios') {
-      const hasPermission = await checkAndRequestPermission();
-      if (!hasPermission) {
+      console.log('📥 [다운로드] iOS 권한 체크 시작');
+      try {
+        const hasPermission = await checkAndRequestPermission();
+        console.log('📥 [다운로드] 권한 체크 결과:', hasPermission);
+        if (!hasPermission) {
+          console.log('❌ [다운로드] 권한이 없어서 종료');
+          return;
+        }
+        console.log('✅ [다운로드] 권한 확인 완료');
+      } catch (error: any) {
+        console.error('❌ [다운로드] 권한 확인 중 오류:', error);
+        console.error('❌ [다운로드] 권한 확인 오류 상세:', {
+          message: error?.message,
+          code: error?.code,
+          stack: error?.stack,
+        });
+        Alert.alert(t('error'), t('likeUpdateError'));
         return;
       }
+    } else {
+      console.log('📥 [다운로드] Android - 권한 체크 건너뜀');
     }
 
+    console.log('📥 [다운로드] 로딩 상태 설정 시작');
     setLoading(true);
+    setIsCapturing(false); // 초기화
     let localFile: string | null = null;
+
     try {
-      // 워터마크가 포함된 이미지 캡처
-      if (imageRef.current) {
-        // 워터마크를 임시로 표시하고 캡처
-        setIsCapturing(true);
-        // 워터마크가 렌더링될 시간을 주기 위해 약간의 딜레이
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        const uri = await captureRef(imageRef.current, {
-          format: 'jpg',
-          quality: 0.9,
-        });
-        
-        setIsCapturing(false);
-        
-        await CameraRoll.save(uri, {type: 'photo'});
-        Toast.show({
-          type: 'success',
-          text1: '다운로드 완료',
-          text2: '갤러리에 저장되었습니다.',
-        });
+      console.log('📥 [다운로드] imageRef.current 확인:', !!imageRef.current);
+
+      // iOS에서는 captureRef가 크래시를 일으키므로 원본 이미지 다운로드만 사용
+      // Android에서는 워터마크가 포함된 이미지 캡처 시도
+      const useCapture = Platform.OS === 'android' && imageRef.current;
+
+      if (useCapture) {
+        console.log('📥 [다운로드] 이미지 캡처 시도 (Android)');
+        try {
+          // 워터마크를 임시로 표시하고 캡처
+          setIsCapturing(true);
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          if (!imageRef.current) {
+            throw new Error('이미지 참조가 유효하지 않습니다.');
+          }
+
+          const uri = await captureRef(imageRef.current, {
+            format: 'jpg',
+            quality: 0.9,
+          });
+
+          setIsCapturing(false);
+
+          await CameraRoll.save(uri, { type: 'photo' });
+          Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
+          setLoading(false);
+          return; // 성공 시 함수 종료
+        } catch (captureError: any) {
+          console.error('❌ [다운로드] 이미지 캡처 실패:', captureError);
+          console.error('❌ [다운로드] 캡처 오류 상세:', {
+            message: captureError?.message,
+            code: captureError?.code,
+            stack: captureError?.stack,
+            name: captureError?.name,
+          });
+          setIsCapturing(false);
+          // 캡처 실패 시 원본 이미지 다운로드로 fallback
+        }
       } else {
-        // 캡처 실패 시 원본 이미지 다운로드
-        localFile = `${RNFS.CachesDirectoryPath}/${Date.now()}_codi.jpeg`;
-        await RNFS.downloadFile({fromUrl: imageUrl, toFile: localFile}).promise;
-        await CameraRoll.save(`file://${localFile}`, {type: 'photo'});
-        Toast.show({
-          type: 'success',
-          text1: '다운로드 완료',
-          text2: '갤러리에 저장되었습니다.',
+        if (Platform.OS === 'ios') {
+          console.log('📥 [다운로드] iOS - 원본 이미지 다운로드로 진행 (captureRef 크래시 방지)');
+        } else {
+          console.log('📥 [다운로드] imageRef.current가 null, 원본 이미지 다운로드로 진행');
+        }
+      }
+
+      // 캡처 실패 시 또는 imageRef가 없을 때 원본 이미지 다운로드
+      localFile = `${RNFS.CachesDirectoryPath}/${Date.now()}_codi.jpeg`;
+      await RNFS.downloadFile({ fromUrl: imageUrl, toFile: localFile }).promise;
+
+      // iOS에서는 react-native-share를 사용하여 공유 시트 표시 (크래시 방지)
+      // Android는 기존대로 CameraRoll.save 사용
+      if (Platform.OS === 'ios') {
+        await Share.share({
+          url: `file://${localFile}`,
         });
+        Toast.show({ type: 'success', text1: t('imageShared') });
+      } else {
+        // Android는 기존대로 CameraRoll.save 사용
+        await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
+        Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
       }
     } catch (error: any) {
-      console.error('다운로드 실패:', error);
-      // Android에서 권한 관련 에러인 경우
-      if (Platform.OS === 'android' && (error?.message?.includes('permission') || error?.code === 'E_PERMISSION_MISSING')) {
+      console.error('❌ [다운로드] 전체 프로세스 실패:', error);
+      console.error('❌ [다운로드] 오류 상세 정보:', {
+        message: error?.message,
+        code: error?.code,
+        stack: error?.stack,
+        name: error?.name,
+        platform: Platform.OS,
+        imageUrl: imageUrl,
+        localFile: localFile,
+      });
+      setIsCapturing(false);
+
+      // iOS/Android 권한 관련 에러 처리
+      if (error?.message?.includes('permission') || error?.code === 'E_PERMISSION_MISSING' || error?.code === 'E_PERMISSION_DENIED') {
+        console.error('❌ [다운로드] 권한 관련 오류 감지');
         Alert.alert(
-          '권한 필요',
-          '이미지를 저장하려면 사진 라이브러리 접근 권한이 필요합니다.\n설정에서 권한을 허용해주세요.',
+          t('permissionRequired'),
+          t('photoPermissionMessage'),
           [
             {
-              text: '설정 열기',
+              text: t('openSettings'),
               onPress: () => openSettings(),
             },
-            {text: '취소', style: 'cancel'},
+            { text: t('cancel'), style: 'cancel' },
           ],
         );
       } else {
+        console.error('❌ [다운로드] 일반 오류 - Toast 표시');
         Toast.show({
           type: 'error',
-          text1: '다운로드 실패',
-          text2: '이미지를 저장하는 데 실패했습니다.',
+          text1: t('downloadFailed'),
+          text2: error?.message || t('saveImageFailed'),
         });
       }
     } finally {
+      console.log('📥 [다운로드] finally 블록 실행 - 정리 시작');
       setLoading(false);
+      setIsCapturing(false);
       // 임시 파일 정리
       if (localFile) {
-        await RNFS.unlink(localFile).catch(err =>
-          console.error('임시 파일 삭제 실패', err),
-        );
+        try {
+          console.log('📥 [다운로드] 임시 파일 삭제 시도:', localFile);
+          const exists = await RNFS.exists(localFile);
+          if (exists) {
+            await RNFS.unlink(localFile);
+            console.log('✅ [다운로드] 임시 파일 삭제 완료');
+          } else {
+            console.log('📥 [다운로드] 임시 파일이 이미 없음');
+          }
+        } catch (err: any) {
+          console.error('❌ [다운로드] 임시 파일 삭제 실패:', err);
+          console.error('❌ [다운로드] 삭제 오류 상세:', {
+            message: err?.message,
+            code: err?.code,
+          });
+        }
       }
+      console.log('📥 [다운로드] finally 블록 완료');
     }
   };
 
   // 삭제 함수
   const handleDelete = () => {
     Alert.alert('삭제 확인', '정말로 이 코디를 삭제하시겠습니까?', [
-      {text: '취소', style: 'cancel'},
+      { text: '취소', style: 'cancel' },
       {
         text: '삭제',
         onPress: async () => {
@@ -234,17 +326,17 @@ const CodiDetailScreen = () => {
               .collection('recentResults')
               .doc(codiId)
               .delete();
-            
+
             Toast.show({
               type: 'success',
-              text1: '삭제 완료',
-              text2: '코디가 삭제되었습니다.',
+              text1: t('deleteComplete'),
+              text2: t('codiDeleted'),
             });
-            
+
             navigation.goBack();
           } catch (error) {
             console.error('삭제 실패:', error);
-            Alert.alert('오류', '삭제 중 문제가 발생했습니다.');
+            Alert.alert(t('error'), t('deleteError'));
           }
         },
         style: 'destructive',
@@ -254,8 +346,8 @@ const CodiDetailScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+      <StatusBar barStyle="dark-content" />
+
       {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -263,11 +355,11 @@ const CodiDetailScreen = () => {
           onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        
+
         <View style={styles.headerInfo}>
           <Text style={styles.dateText}>{dateInfo.fullDate}</Text>
         </View>
-        
+
         <TouchableOpacity
           style={styles.heartButton}
           onPress={toggleLike}>
@@ -285,9 +377,9 @@ const CodiDetailScreen = () => {
               <ActivityIndicator size="large" color="#FFFFFF" />
             </View>
           )}
-          
+
           <Image
-            source={{uri: imageUrl}}
+            source={{ uri: imageUrl }}
             style={styles.fullImage}
             resizeMode="contain"
             onLoadStart={() => setImageLoading(true)}
@@ -307,7 +399,7 @@ const CodiDetailScreen = () => {
       </View>
 
       {/* 하단 버튼 영역 */}
-      <View style={[styles.bottomContainer, {paddingBottom: insets.bottom + 20}]}>
+      <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + 20 }]}>
         <TouchableOpacity
           onPress={handleDownload}
           disabled={loading}
@@ -315,17 +407,19 @@ const CodiDetailScreen = () => {
           style={styles.downloadButtonContainer}>
           <LinearGradient
             colors={['#FF6B9D', '#8B5CF6']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
             style={styles.downloadButton}>
-            {loading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <Text style={styles.downloadIcon}>📥</Text>
-                <Text style={styles.downloadButtonText}>다운로드</Text>
-              </>
-            )}
+            <View style={styles.downloadButtonContent}>
+              {loading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.downloadIcon}>📥</Text>
+                  <Text style={styles.downloadButtonText}>{t('download')}</Text>
+                </>
+              )}
+            </View>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -333,7 +427,7 @@ const CodiDetailScreen = () => {
           style={styles.deleteButton}
           onPress={handleDelete}>
           <Text style={styles.deleteIcon}>🗑️</Text>
-          <Text style={styles.deleteButtonText}>삭제</Text>
+          <Text style={styles.deleteButtonText}>{t('delete')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -412,21 +506,28 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   downloadButtonContainer: {
-    flex: 1,
+    flex: 1.2, // 다운로드 버튼 너비를 조금 더 늘림 (1 → 1.2)
   },
   downloadButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 18,
+    paddingHorizontal: 0, // 좌우 패딩 제거 (내부에서 관리)
+    paddingVertical: 0, // 상하 패딩 제거 (내부에서 관리)
     borderRadius: 20,
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50, // 최소 높이 설정 (삭제 버튼과 동일하게)
     shadowColor: '#8B5CF6',
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+  },
+  downloadButtonContent: {
+    flexDirection: 'row', // 아이콘과 텍스트가 가로로 나란히
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    gap: 8, // 아이콘과 텍스트 사이 간격
   },
   downloadButtonText: {
     color: '#FFFFFF',
@@ -444,8 +545,9 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     borderRadius: 20,
     gap: 8,
+    height: 50, // 고정 높이 설정 (다운로드 버튼과 동일하게)
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,

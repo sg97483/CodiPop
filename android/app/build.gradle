@@ -1,7 +1,6 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
-apply plugin: 'com.google.gms.google-services' // 이전에 추가한 위치가 파일 맨 하단이었으면, 여기로 옮겨주세요.
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -49,7 +48,10 @@ react {
     // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
     //
     //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
+    //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
     // hermesFlags = ["-O", "-output-source-map"]
+    
+    autolinkLibrariesWithApp()
 }
 
 /**
@@ -80,8 +82,21 @@ android {
         applicationId "com.mk.codipop"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
-        versionName "1.0.5"
+        versionCode 8
+        versionName "1.0.8"
+        
+        // 16KB 페이지 크기 지원을 위한 NDK r27 설정
+        // NDK r28 이상이면 자동으로 지원되지만, r27은 명시적 설정 필요
+        externalNativeBuild {
+            cmake {
+                // 16KB 페이지 크기 지원 활성화
+                arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+            }
+            ndkBuild {
+                // ndk-build를 사용하는 라이브러리도 16KB 지원
+                arguments "APP_CFLAGS+=-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+            }
+        }
     }
     signingConfigs {
         debug {
@@ -108,6 +123,10 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            // Debug 빌드 속도 향상: 실제 디바이스용 아키텍처만 빌드
+            ndk {
+                abiFilters 'arm64-v8a'
+            }
         }
         release {
             // Caution! In production, you need to generate your own keystore file.
@@ -115,6 +134,39 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // Release 빌드: 모든 아키텍처 빌드 (프로덕션 배포용)
+            ndk {
+                abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            }
+        }
+    }
+    
+    // 16KB 페이지 크기 지원을 위한 네이티브 라이브러리 정렬 설정
+    // Android Gradle Plugin 8.7.0에서 완전 지원
+    // AGP 8.5.1 이상이면 useLegacyPackaging = false 사용 가능
+    // false: 라이브러리가 APK에 직접 포함되어 설치 공간 절약
+    // true: 라이브러리가 apk에서 추출되어 디스크에 복사 (더 많은 공간 필요하지만 호환성 향상)
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false // AGP 8.7.0이므로 false 사용 가능
+        }
+    }
+    
+    // React Native 0.76: rncli와 autolinking 중복 방지 - rncli 제외
+    sourceSets {
+        main {
+            java {
+                exclude '**/rncli/**'
+            }
+        }
+    }
+}
+
+// React Native 0.76: rncli 디렉토리 자동 삭제 (autolinking과 중복 방지)
+tasks.whenTaskAdded { task ->
+    if (task.name == 'compileDebugJavaWithJavac' || task.name == 'compileReleaseJavaWithJavac') {
+        task.doFirst {
+            delete fileTree("${project.buildDir}/generated/rncli")
         }
     }
 }
@@ -124,12 +176,18 @@ dependencies {
     implementation("com.facebook.react:react-android")
     // splashscreen 라이브러리는 그대로 둡니다.
     implementation 'androidx.core:core-splashscreen:1.0.1'
+    // Firebase Native SDK 호출을 위해 firebase-common 추가 (FirebaseApp 초기화용)
+    implementation 'com.google.firebase:firebase-common:21.0.0'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
     }
+
 }
 
-apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
+
+
+// Firebase Google Services 플러그인은 파일 맨 아래에 있어야 합니다
+apply plugin: 'com.google.gms.google-services'
