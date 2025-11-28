@@ -13,6 +13,7 @@ import firebase from '@react-native-firebase/app';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import LottieView from 'lottie-react-native';
+import mobileAds from 'react-native-google-mobile-ads';
 
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -119,6 +120,15 @@ function App(): React.JSX.Element | null {
       BootSplash.hide({fade: true});
     }
   }, [isFirstLaunch, initializing]);
+
+  // ✅ 4. Google Mobile Ads 초기화
+  useEffect(() => {
+    mobileAds()
+      .initialize()
+      .then(adapterStatuses => {
+        console.log('📱 Google Mobile Ads 초기화 완료:', adapterStatuses);
+      });
+  }, []);
 
   // 로딩이 모두 끝날 때까지 Lottie 애니메이션 표시
   if (isFirstLaunch === null || initializing) {
