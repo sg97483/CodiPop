@@ -41,18 +41,18 @@ import { captureRef } from 'react-native-view-shot';
 import { check, request, PERMISSIONS, RESULTS, openSettings, Permission } from 'react-native-permissions';
 import { useTranslation } from 'react-i18next';
 // import Share from 'react-native-share'; // ❌ 충돌 발생으로 제거
-// import { RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
+import { RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
 
-// const adUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxxxxxx/yyyyyyyyyy';
+const adUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxxxxxx/yyyyyyyyyy';
 
-// const rewarded = RewardedAd.createForAdRequest(adUnitId, {
-//   requestNonPersonalizedAdsOnly: true,
-// });
+const rewarded = RewardedAd.createForAdRequest(adUnitId, {
+  requestNonPersonalizedAdsOnly: true,
+});
 
 const CATEGORIES = ['ALL', 'TOPS', 'BOTTOMS', 'SHOES', 'OUTER'];
 const MAX_CLOTHING_SELECTION = 2; // 최대 옷 선택 개수
 const MAX_CLOSET_ITEMS = 30; // 옷장 최대 아이템 개수
-const MAX_DAILY_FITTING = 5; // 하루 최대 이미지 합성 횟수
+const MAX_DAILY_FITTING = 1; // 하루 최대 이미지 합성 횟수 (테스트용)
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_MARGIN = 4;
@@ -111,45 +111,45 @@ const VirtualFittingScreen = () => {
     {},
   ); // ✅ 이미지 로딩 state 추가
   const [remainingCount, setRemainingCount] = useState<number>(MAX_DAILY_FITTING); // 남은 일일 사용 횟수
-  // const [isAdLoaded, setIsAdLoaded] = useState(false);
+  const [isAdLoaded, setIsAdLoaded] = useState(false);
 
-  // // 광고 로드 및 이벤트 리스너 설정
-  // useEffect(() => {
-  //   const unsubscribeLoaded = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
-  //     setIsAdLoaded(true);
-  //   });
-  //   const unsubscribeEarned = rewarded.addAdEventListener(
-  //     RewardedAdEventType.EARNED_REWARD,
-  //     reward => {
-  //       console.log('User earned reward of ', reward);
-  //       // 보상 지급: 사용 횟수 1회 차감 (즉, 1회 충전)
-  //       decreaseDailyUsageCount().then(() => {
-  //         checkDailyUsage().then(({ remainingCount }) => {
-  //           setRemainingCount(remainingCount);
-  //           Toast.show({ type: 'success', text1: '1회 충전 완료! 🎉', text2: '이제 다시 피팅해 보세요!' });
-  //         });
-  //       });
-  //     },
-  //   );
+  // 광고 로드 및 이벤트 리스너 설정
+  useEffect(() => {
+    const unsubscribeLoaded = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
+      setIsAdLoaded(true);
+    });
+    const unsubscribeEarned = rewarded.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      reward => {
+        console.log('User earned reward of ', reward);
+        // 보상 지급: 사용 횟수 1회 차감 (즉, 1회 충전)
+        decreaseDailyUsageCount().then(() => {
+          checkDailyUsage().then(({ remainingCount }) => {
+            setRemainingCount(remainingCount);
+            Toast.show({ type: 'success', text1: '1회 충전 완료! 🎉', text2: '이제 다시 피팅해 보세요!' });
+          });
+        });
+      },
+    );
 
-  //   // 광고 로드
-  //   rewarded.load();
+    // 광고 로드
+    rewarded.load();
 
-  //   return () => {
-  //     unsubscribeLoaded();
-  //     unsubscribeEarned();
-  //   };
-  // }, []);
+    return () => {
+      unsubscribeLoaded();
+      unsubscribeEarned();
+    };
+  }, []);
 
-  // // 광고 보여주기 함수
-  // const showRewardAd = () => {
-  //   if (isAdLoaded) {
-  //     rewarded.show();
-  //   } else {
-  //     Toast.show({ type: 'error', text1: '광고 준비 중', text2: '잠시 후 다시 시도해 주세요.' });
-  //     rewarded.load(); // 다시 로드 시도
-  //   }
-  // };
+  // 광고 보여주기 함수
+  const showRewardAd = () => {
+    if (isAdLoaded) {
+      rewarded.show();
+    } else {
+      Toast.show({ type: 'error', text1: '광고 준비 중', text2: '잠시 후 다시 시도해 주세요.' });
+      rewarded.load(); // 다시 로드 시도
+    }
+  };
 
   // 워크스루 초기화 - 화면 포커스 시 체크
   useEffect(() => {
@@ -179,12 +179,13 @@ const VirtualFittingScreen = () => {
   const handleWorkthroughNext = () => {
     if (workthroughStep === WorkthroughStep.SELECT_PERSON) {
       // 2단계로 이동
-      setIsPanelExpanded(true);
-      RNAnimated.timing(slideUpAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+      // setIsPanelExpanded(true);
+      // RNAnimated.timing(slideUpAnim, {
+      //   toValue: 1,
+      //   duration: 300,
+      //   useNativeDriver: true,
+      //   useNativeDriver: true,
+      // }).start();
       setWorkthroughStep(WorkthroughStep.SELECT_CLOTHING);
     } else if (workthroughStep === WorkthroughStep.SELECT_CLOTHING) {
       // 3단계로 이동
@@ -476,23 +477,16 @@ const VirtualFittingScreen = () => {
     const { canUse, remainingCount: currentRemaining } = await checkDailyUsage();
     if (!canUse) {
       setRemainingCount(0);
-      // Alert.alert(
-      //   '일일 무료 횟수 소진',
-      //   `하루 최대 ${MAX_DAILY_FITTING}회 무료 피팅을 모두 사용하셨습니다.\n광고를 보고 1회 충전하시겠습니까?`,
-      //   [
-      //     { text: '취소', style: 'cancel' },
-      //     {
-      //       text: '광고 보고 충전 🎥',
-      //       onPress: () => showRewardAd(),
-      //       style: 'default'
-      //     }
-      //   ]
-      // );
       Alert.alert(
-        t('dailyLimitExceededTitle'),
-        t('dailyLimitExceededMessage', { max: MAX_DAILY_FITTING }),
+        '일일 무료 횟수 소진',
+        `하루 최대 ${MAX_DAILY_FITTING}회 무료 피팅을 모두 사용하셨습니다.\n광고를 보고 1회 충전하시겠습니까?`,
         [
-          { text: t('confirm'), style: 'cancel' }
+          { text: '취소', style: 'cancel' },
+          {
+            text: '광고 보고 충전 🎥',
+            onPress: () => showRewardAd(),
+            style: 'default'
+          }
         ]
       );
       return;

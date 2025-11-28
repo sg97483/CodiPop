@@ -1,6 +1,6 @@
 // src/screens/HomeScreen.tsx
 
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   View,
@@ -13,14 +13,14 @@ import {
   ScrollView,
   ImageBackground,
 } from 'react-native';
-import {useNavigation, useIsFocused} from '@react-navigation/native'; // ✅ useIsFocused 추가
-import {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
-import {NativeStackNavigationProp} from '@react-navigation/native-stack'; // ✅ NativeStackNavigationProp import
-import {CompositeNavigationProp} from '@react-navigation/native'; // ✅ CompositeNavigationProp import
-import {MainTabParamList} from '../navigators/MainTabNavigator'; // ✅ MainTabParamList import
+import { useNavigation, useIsFocused } from '@react-navigation/native'; // ✅ useIsFocused 추가
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // ✅ NativeStackNavigationProp import
+import { CompositeNavigationProp } from '@react-navigation/native'; // ✅ CompositeNavigationProp import
+import { MainTabParamList } from '../navigators/MainTabNavigator'; // ✅ MainTabParamList import
 import firestore from '@react-native-firebase/firestore'; // ✅ firestore import
 import auth from '@react-native-firebase/auth'; // ✅ auth import
-import {RootStackParamList} from 'App';
+import { RootStackParamList } from 'App';
 
 type HomeScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -51,18 +51,18 @@ const HomeScreen = () => {
   // 사용자 이름 가져오기 함수
   const getUserDisplayName = () => {
     if (!user) return 'CodiPOP';
-    
+
     // Google 로그인의 경우 displayName 또는 email에서 이름 추출
     if (user.displayName) {
       return user.displayName;
     }
-    
+
     // email에서 이름 추출 (예: john.doe@gmail.com -> John)
     if (user.email) {
       const emailName = user.email.split('@')[0];
       return emailName.charAt(0).toUpperCase() + emailName.slice(1);
     }
-    
+
     return 'CodiPOP';
   };
 
@@ -82,17 +82,28 @@ const HomeScreen = () => {
         .collection('recentResults')
         .orderBy('createdAt', 'desc') // 최신순으로 정렬
         .limit(10) // 최근 10개만 가져오기
-        .onSnapshot(querySnapshot => {
-          const items: RecentItem[] = [];
-          querySnapshot.forEach(documentSnapshot => {
-            items.push({
-              id: documentSnapshot.id,
-              imageUrl: documentSnapshot.data().imageUrl,
+        .onSnapshot(
+          querySnapshot => {
+            if (!querySnapshot) {
+              console.log('Recent results querySnapshot is null');
+              setLoading(false);
+              return;
+            }
+            const items: RecentItem[] = [];
+            querySnapshot.forEach(documentSnapshot => {
+              items.push({
+                id: documentSnapshot.id,
+                imageUrl: documentSnapshot.data().imageUrl,
+              });
             });
-          });
-          setRecentItems(items);
-          setLoading(false);
-        });
+            setRecentItems(items);
+            setLoading(false);
+          },
+          error => {
+            console.error('Recent results snapshot error:', error);
+            setLoading(false);
+          },
+        );
 
       // 화면을 벗어나면 구독 해제
       return () => subscriber();
@@ -108,19 +119,30 @@ const HomeScreen = () => {
         .doc(user.uid)
         .collection('closet')
         .orderBy('createdAt', 'desc')
-        .onSnapshot(querySnapshot => {
-          const items: ClosetItem[] = [];
-          querySnapshot.forEach(documentSnapshot => {
-            const data = documentSnapshot.data();
-            items.push({
-              id: documentSnapshot.id,
-              imageUrl: data.imageUrl,
-              category: data.category,
+        .onSnapshot(
+          querySnapshot => {
+            if (!querySnapshot) {
+              console.log('Closet querySnapshot is null');
+              setClosetLoading(false);
+              return;
+            }
+            const items: ClosetItem[] = [];
+            querySnapshot.forEach(documentSnapshot => {
+              const data = documentSnapshot.data();
+              items.push({
+                id: documentSnapshot.id,
+                imageUrl: data.imageUrl,
+                category: data.category,
+              });
             });
-          });
-          setClosetItems(items);
-          setClosetLoading(false);
-        });
+            setClosetItems(items);
+            setClosetLoading(false);
+          },
+          error => {
+            console.error('Closet snapshot error:', error);
+            setClosetLoading(false);
+          },
+        );
 
       return () => subscriber();
     }
@@ -131,7 +153,7 @@ const HomeScreen = () => {
     if (closetItems.length === 0) return null;
 
     // 카테고리별 아이템 수 계산
-    const categoryCount: {[key: string]: number} = {};
+    const categoryCount: { [key: string]: number } = {};
     closetItems.forEach(item => {
       if (item.category) {
         categoryCount[item.category] = (categoryCount[item.category] || 0) + 1;
@@ -139,7 +161,7 @@ const HomeScreen = () => {
     });
 
     // 가장 많은 카테고리 찾기
-    const mostPopularCategory = Object.keys(categoryCount).reduce((a, b) => 
+    const mostPopularCategory = Object.keys(categoryCount).reduce((a, b) =>
       categoryCount[a] > categoryCount[b] ? a : b
     );
 
@@ -171,12 +193,12 @@ const HomeScreen = () => {
               오늘 입어볼 옷을 찾아볼까요?
             </Text>
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.profileIcon}
             onPress={() => navigation.jumpTo('Profile')}>
             {getUserProfileImage() ? (
               <Image
-                source={{uri: getUserProfileImage() || ''}}
+                source={{ uri: getUserProfileImage() || '' }}
                 style={styles.profileImage}
               />
             ) : (
@@ -206,7 +228,7 @@ const HomeScreen = () => {
             <View style={styles.ctaContentColumn}>
               <View style={styles.ctaContentRow}>
                 <Text style={styles.ctaSubtitle}>
-                AI로 나만의 코디를 완성해 보세요.
+                  나만의 코디를 완성해 보세요.
                 </Text>
                 <TouchableOpacity
                   style={styles.ctaButton}
@@ -225,25 +247,25 @@ const HomeScreen = () => {
           </View>
 
           {loading ? (
-            <ActivityIndicator style={{marginTop: 20}} size="large" />
+            <ActivityIndicator style={{ marginTop: 20 }} size="large" />
           ) : recentItems.length > 0 ? (
             <FlatList
               data={recentItems}
               horizontal
               showsHorizontalScrollIndicator={false}
               keyExtractor={item => item.id}
-              renderItem={({item}) => (
+              renderItem={({ item }) => (
                 <TouchableOpacity
                   onPress={() =>
-                    navigation.navigate('Detail', {imageUrl: item.imageUrl})
+                    navigation.navigate('Detail', { imageUrl: item.imageUrl })
                   }>
                   <Image
-                    source={{uri: item.imageUrl}}
+                    source={{ uri: item.imageUrl }}
                     style={styles.feedCard}
                   />
                 </TouchableOpacity>
               )}
-              contentContainerStyle={{paddingRight: 20}}
+              contentContainerStyle={{ paddingRight: 20 }}
             />
           ) : (
             <View style={styles.emptyCard}>
@@ -264,18 +286,18 @@ const HomeScreen = () => {
                   총 {recommendations.totalItems}개의 옷 중에서 추천해요
                 </Text>
               </View>
-              
+
               <FlatList
                 data={recommendations.items}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 keyExtractor={item => item.id}
-                renderItem={({item}) => (
+                renderItem={({ item }) => (
                   <TouchableOpacity
-                    onPress={() => navigation.navigate('VirtualFitting', {clothingUrl: item.imageUrl})}
+                    onPress={() => navigation.navigate('VirtualFitting', { clothingUrl: item.imageUrl })}
                     style={styles.recommendationItem}>
                     <Image
-                      source={{uri: item.imageUrl}}
+                      source={{ uri: item.imageUrl }}
                       style={styles.recommendationImage}
                     />
                   </TouchableOpacity>
@@ -345,7 +367,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     overflow: 'hidden',
     shadowColor: '#8B5CF6',
-    shadowOffset: {width: 0, height: 8},
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 10,
@@ -396,7 +418,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: -0.5,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: {width: 0, height: 2},
+    textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   ctaSubtitle: {
@@ -406,7 +428,7 @@ const styles = StyleSheet.create({
     fontWeight: '600', // '400' → '600'으로 더 굵게
     flex: 1,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: {width: 0, height: 1},
+    textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
   ctaButton: {

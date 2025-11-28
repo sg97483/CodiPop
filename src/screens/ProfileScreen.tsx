@@ -268,14 +268,14 @@ const styles = StyleSheet.create({
   deleteAccountButton: {
     marginTop: 12,
     marginHorizontal: 20,
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#D0D0D0',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
   deleteAccountButtonText: {
     fontSize: 16,
-    color: '#FFFFFF',
+    color: 'red',
     fontWeight: '600',
   },
   loadingContainer: {

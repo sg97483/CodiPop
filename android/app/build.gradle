@@ -82,8 +82,8 @@ android {
         applicationId "com.mk.codipop"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
-        versionName "1.0.8"
+        versionCode 9
+        versionName "1.0.9"
         
         // 16KB 페이지 크기 지원을 위한 NDK r27 설정
         // NDK r28 이상이면 자동으로 지원되지만, r27은 명시적 설정 필요
