@@ -1,8 +1,7 @@
 // src/screens/CodiDetailScreen.tsx
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -14,20 +13,38 @@ import {
   StatusBar,
   InteractionManager,
   Share,
+  ScrollView,
+  Platform,
+  Linking,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import RNFS from 'react-native-fs';
 import Toast from 'react-native-toast-message';
-import { Platform, Linking } from 'react-native';
 import { check, request, PERMISSIONS, RESULTS, openSettings, Permission } from 'react-native-permissions';
 import { captureRef } from 'react-native-view-shot';
 import { useTranslation } from 'react-i18next';
+import { useActionSheet } from '@expo/react-native-action-sheet';
+import { AdEventType, RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
+import ProductInfoModal from '../components/ProductInfoModal';
+import {
+  addCodiItemsToWishlist,
+  addToWishlist,
+  syncWishlistProductInfo,
+} from '../services/wishlistService';
+import { calculateTotalPrice } from '../services/codiPresetsService';
+import { createCommunityPost } from '../services/communityService';
+import { getUserReferralCode } from '../services/ticketService';
+import { CodiPopViralWatermark } from '../components/CodiPopViralWatermark';
+import type { CodiClothingItem } from '../types/shopping';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -42,19 +59,123 @@ type CodiDetailScreenRouteProp = RouteProp<{
 
 type CodiDetailScreenNavigationProp = NativeStackNavigationProp<any>;
 
+const adUnitId = __DEV__
+  ? TestIds.REWARDED
+  : Platform.OS === 'ios'
+  ? 'ca-app-pub-6990308526694074/4347779439'
+  : 'ca-app-pub-6990308526694074/7899285287';
+
+const rewarded = RewardedAd.createForAdRequest(adUnitId, {
+  keywords: ['fashion', 'clothing', 'shopping', 'style'],
+});
+
 const CodiDetailScreen = () => {
   const navigation = useNavigation<CodiDetailScreenNavigationProp>();
   const { t } = useTranslation();
   const route = useRoute<CodiDetailScreenRouteProp>();
   const user = auth().currentUser;
   const insets = useSafeAreaInsets();
+  const { showActionSheetWithOptions } = useActionSheet();
+
+  const [adLoaded, setAdLoaded] = useState(false);
+
+  useEffect(() => {
+    const unsubscribeLoaded = rewarded.addAdEventListener(
+      RewardedAdEventType.LOADED,
+      () => {
+        setAdLoaded(true);
+      },
+    );
+    const unsubscribeEarned = rewarded.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      reward => {
+        console.log('User earned reward for HD Download (CodiDetail):', reward);
+        processDownloadImage(false);
+      },
+    );
+    const unsubscribeClosed = rewarded.addAdEventListener(
+      AdEventType.CLOSED,
+      () => {
+        setAdLoaded(false);
+        rewarded.load();
+      },
+    );
+
+    rewarded.load();
+
+    return () => {
+      unsubscribeLoaded();
+      unsubscribeEarned();
+      unsubscribeClosed();
+    };
+  }, []);
+
+  const showRewardAd = () => {
+    if (adLoaded) {
+      rewarded.show();
+    } else {
+      Toast.show({
+        type: 'info',
+        text1: '광고를 불러오는 중입니다...',
+        text2: '잠시 후 다시 시도해 주세요.',
+      });
+      rewarded.load();
+    }
+  };
 
   const { codiId, imageUrl, createdAt, isLiked } = route.params;
   const [loading, setLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [currentIsLiked, setCurrentIsLiked] = useState(isLiked || false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [clothingItems, setClothingItems] = useState<CodiClothingItem[]>([]);
+  const [clothingImageUrls, setClothingImageUrls] = useState<string[]>([]);
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [productModalVisible, setProductModalVisible] = useState(false);
+  const [sharingCommunity, setSharingCommunity] = useState(false);
+  const [userReferralCode, setUserReferralCode] = useState<string>('CODI20');
   const imageRef = useRef<View>(null);
+
+  useEffect(() => {
+    try {
+      Image.prefetch(Image.resolveAssetSource(require('../assets/images/codipop_logo.png')).uri);
+    } catch (e) {
+      console.warn('Logo prefetch error:', e);
+    }
+    getUserReferralCode().then(code => {
+      if (code) setUserReferralCode(code);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const unsubscribe = firestore()
+      .collection('users')
+      .doc(user.uid)
+      .collection('recentResults')
+      .doc(codiId)
+      .onSnapshot(doc => {
+        if (!doc.exists) {
+          return;
+        }
+        const data = doc.data();
+        setClothingItems(data?.clothingItems || []);
+        setClothingImageUrls(data?.clothingImageUrls || []);
+        if (typeof data?.isLiked === 'boolean') {
+          setCurrentIsLiked(data.isLiked);
+        }
+      });
+
+    return () => unsubscribe();
+  }, [codiId, user]);
+
+  const totalPrice = useMemo(
+    () => calculateTotalPrice(clothingItems),
+    [clothingItems],
+  );
 
   // 날짜 정보 계산
   const getDateInfo = () => {
@@ -72,6 +193,31 @@ const CodiDetailScreen = () => {
   };
 
   const dateInfo = getDateInfo();
+
+  const handleShareToCommunity = async () => {
+    if (!user || sharingCommunity) {
+      return;
+    }
+    setSharingCommunity(true);
+    try {
+      const postId = await createCommunityPost({
+        authorId: user.uid,
+        authorName: user.displayName || user.email || 'CodiPOP',
+        authorPhotoUrl: user.photoURL,
+        imageUrl,
+        clothingImageUrls,
+        clothingItems,
+        sourceCodiId: codiId,
+      });
+      Toast.show({ type: 'success', text1: t('communityPublished') });
+      navigation.navigate('CommunityPostDetail', { postId });
+    } catch (error) {
+      console.error(error);
+      Toast.show({ type: 'error', text1: t('communityPublishFailed') });
+    } finally {
+      setSharingCommunity(false);
+    }
+  };
 
   // 하트 버튼 토글 함수
   const toggleLike = async () => {
@@ -143,60 +289,35 @@ const CodiDetailScreen = () => {
     }
   };
 
-  // 이미지 다운로드 함수
-  const handleDownload = async () => {
-    console.log('📥 [다운로드 시작] handleDownload 호출됨');
+  // 실제 이미지 다운로드 처리 함수 (isWatermarked: true -> 일반(워터마크), false -> HD 고화질 원본)
+  const processDownloadImage = async (isWatermarked: boolean) => {
+    console.log('📥 [다운로드 프로세스 시작] isWatermarked:', isWatermarked);
 
     if (!imageUrl) {
       console.error('❌ [다운로드 실패] imageUrl이 없습니다');
       return;
     }
 
-    console.log('📥 [다운로드] imageUrl:', imageUrl);
-
-    // iOS는 권한 체크, Android는 바로 시도 (CameraRoll.save가 자체 처리)
     if (Platform.OS === 'ios') {
-      console.log('📥 [다운로드] iOS 권한 체크 시작');
       try {
         const hasPermission = await checkAndRequestPermission();
-        console.log('📥 [다운로드] 권한 체크 결과:', hasPermission);
-        if (!hasPermission) {
-          console.log('❌ [다운로드] 권한이 없어서 종료');
-          return;
-        }
-        console.log('✅ [다운로드] 권한 확인 완료');
+        if (!hasPermission) return;
       } catch (error: any) {
-        console.error('❌ [다운로드] 권한 확인 중 오류:', error);
-        console.error('❌ [다운로드] 권한 확인 오류 상세:', {
-          message: error?.message,
-          code: error?.code,
-          stack: error?.stack,
-        });
+        console.error('❌ [다운로드] 권한 확인 오류:', error);
         Alert.alert(t('error'), t('likeUpdateError'));
         return;
       }
-    } else {
-      console.log('📥 [다운로드] Android - 권한 체크 건너뜀');
     }
 
-    console.log('📥 [다운로드] 로딩 상태 설정 시작');
     setLoading(true);
-    setIsCapturing(false); // 초기화
     let localFile: string | null = null;
 
     try {
-      console.log('📥 [다운로드] imageRef.current 확인:', !!imageRef.current);
-
-      // iOS에서는 captureRef가 크래시를 일으키므로 원본 이미지 다운로드만 사용
-      // Android에서는 워터마크가 포함된 이미지 캡처 시도
-      const useCapture = Platform.OS === 'android' && imageRef.current;
-
-      if (useCapture) {
-        console.log('📥 [다운로드] 이미지 캡처 시도 (Android)');
+      if (isWatermarked && imageRef.current) {
+        console.log('📥 [다운로드] 워터마크 이미지 캡처 시도');
         try {
-          // 워터마크를 임시로 표시하고 캡처
           setIsCapturing(true);
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 300));
 
           if (!imageRef.current) {
             throw new Error('이미지 참조가 유효하지 않습니다.');
@@ -210,60 +331,38 @@ const CodiDetailScreen = () => {
           setIsCapturing(false);
 
           await CameraRoll.save(uri, { type: 'photo' });
-          Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
-          setLoading(false);
-          return; // 성공 시 함수 종료
-        } catch (captureError: any) {
-          console.error('❌ [다운로드] 이미지 캡처 실패:', captureError);
-          console.error('❌ [다운로드] 캡처 오류 상세:', {
-            message: captureError?.message,
-            code: captureError?.code,
-            stack: captureError?.stack,
-            name: captureError?.name,
+          Toast.show({
+            type: 'success',
+            text1: '🎁 바이럴 워터마크(QR+초대코드) 포함 저장 완료 📸',
+            text2: 'SNS 공유하고 친구 초대하여 무료 티켓 20장 받아보세요! ✨',
           });
+          setLoading(false);
+          return;
+        } catch (captureError: any) {
+          console.error('❌ [다운로드] 이미지 캡처 실패, 원본 다운로드로 진행:', captureError);
           setIsCapturing(false);
-          // 캡처 실패 시 원본 이미지 다운로드로 fallback
-        }
-      } else {
-        if (Platform.OS === 'ios') {
-          console.log('📥 [다운로드] iOS - 원본 이미지 다운로드로 진행 (captureRef 크래시 방지)');
-        } else {
-          console.log('📥 [다운로드] imageRef.current가 null, 원본 이미지 다운로드로 진행');
         }
       }
 
-      // 캡처 실패 시 또는 imageRef가 없을 때 원본 이미지 다운로드
-      localFile = `${RNFS.CachesDirectoryPath}/${Date.now()}_codi.jpeg`;
+      // HD 고화질 원본 (워터마크 없음) 다운로드 및 저장
+      console.log('📥 [다운로드] HD 고화질 원본 다운로드 진행');
+      localFile = `${RNFS.CachesDirectoryPath}/${Date.now()}_codi_hd.jpeg`;
       await RNFS.downloadFile({ fromUrl: imageUrl, toFile: localFile }).promise;
 
-      // iOS에서는 react-native-share를 사용하여 공유 시트 표시 (크래시 방지)
-      // Android는 기존대로 CameraRoll.save 사용
       if (Platform.OS === 'ios') {
         await Share.share({
           url: `file://${localFile}`,
         });
         Toast.show({ type: 'success', text1: t('imageShared') });
       } else {
-        // Android는 기존대로 CameraRoll.save 사용
         await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
         Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
       }
     } catch (error: any) {
       console.error('❌ [다운로드] 전체 프로세스 실패:', error);
-      console.error('❌ [다운로드] 오류 상세 정보:', {
-        message: error?.message,
-        code: error?.code,
-        stack: error?.stack,
-        name: error?.name,
-        platform: Platform.OS,
-        imageUrl: imageUrl,
-        localFile: localFile,
-      });
       setIsCapturing(false);
 
-      // iOS/Android 권한 관련 에러 처리
       if (error?.message?.includes('permission') || error?.code === 'E_PERMISSION_MISSING' || error?.code === 'E_PERMISSION_DENIED') {
-        console.error('❌ [다운로드] 권한 관련 오류 감지');
         Alert.alert(
           t('permissionRequired'),
           t('photoPermissionMessage'),
@@ -276,7 +375,6 @@ const CodiDetailScreen = () => {
           ],
         );
       } else {
-        console.error('❌ [다운로드] 일반 오류 - Toast 표시');
         Toast.show({
           type: 'error',
           text1: t('downloadFailed'),
@@ -284,33 +382,60 @@ const CodiDetailScreen = () => {
         });
       }
     } finally {
-      console.log('📥 [다운로드] finally 블록 실행 - 정리 시작');
       setLoading(false);
       setIsCapturing(false);
-      // 임시 파일 정리
       if (localFile) {
         try {
-          console.log('📥 [다운로드] 임시 파일 삭제 시도:', localFile);
-          const exists = await RNFS.exists(localFile);
-          if (exists) {
-            await RNFS.unlink(localFile);
-            console.log('✅ [다운로드] 임시 파일 삭제 완료');
-          } else {
-            console.log('📥 [다운로드] 임시 파일이 이미 없음');
-          }
-        } catch (err: any) {
-          console.error('❌ [다운로드] 임시 파일 삭제 실패:', err);
-          console.error('❌ [다운로드] 삭제 오류 상세:', {
-            message: err?.message,
-            code: err?.code,
-          });
-        }
+          await RNFS.unlink(localFile);
+        } catch (e) {}
       }
-      console.log('📥 [다운로드] finally 블록 완료');
     }
   };
 
-  // 삭제 함수
+  // 이미지 다운로드 클릭 시 ActionSheet로 화질 옵션 선택
+  const handleDownload = async () => {
+    if (!imageUrl) return;
+
+    const options = [
+      '✨ 워터마크 없는 HD 고화질 원본 저장 (광고 1회 시청)',
+      '🎁 바이럴 워터마크(QR+초대코드) 포함 저장 (SNS 공유 시 +20장 보너스!)',
+      t('cancel'),
+    ];
+    const cancelButtonIndex = 2;
+
+    showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+        title: '이미지 저장 옵션 선택',
+        message: '고해상도 HD 원본으로 저장하시려면 짧은 광고를 시청해 주세요.',
+      },
+      async (selectedIndex?: number) => {
+        if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) {
+          return;
+        }
+
+        if (selectedIndex === 0) {
+          // ✨ HD 고화질 원본 저장 (광고 시청 후 저장)
+          Alert.alert(
+            'HD 고화질 다운로드 ✨',
+            '짧은 보상형 광고를 시청하시면 워터마크 없는 고해상도(HD) 원본 이미지가 갤러리에 저장됩니다.',
+            [
+              { text: '취소', style: 'cancel' },
+              {
+                text: '광고 보고 HD 저장 🎥',
+                onPress: () => showRewardAd(),
+              },
+            ],
+          );
+        } else if (selectedIndex === 1) {
+          // 🖼️ 일반 화질 (워터마크 포함) 저장
+          await processDownloadImage(true);
+        }
+      },
+    );
+  };
+
   const handleDelete = () => {
     Alert.alert('삭제 확인', '정말로 이 코디를 삭제하시겠습니까?', [
       { text: '취소', style: 'cancel' },
@@ -344,12 +469,113 @@ const CodiDetailScreen = () => {
     ]);
   };
 
+  const handleOpenProduct = async (url?: string) => {
+    if (!url) {
+      Toast.show({ type: 'info', text1: t('productLinkMissing') });
+      return;
+    }
+
+    const canOpen = await Linking.canOpenURL(url);
+    if (!canOpen) {
+      Toast.show({ type: 'error', text1: t('productLinkInvalid') });
+      return;
+    }
+    await Linking.openURL(url);
+  };
+
+  const handleSaveProductInfo = async (product: {
+    productName?: string;
+    productPrice?: number;
+    productUrl?: string;
+    shopName?: string;
+    productSize?: string;
+  }) => {
+    if (!user || editingItemIndex === null) {
+      return;
+    }
+
+    const nextItems = [...clothingItems];
+    nextItems[editingItemIndex] = {
+      ...nextItems[editingItemIndex],
+      ...product,
+    };
+
+    await firestore()
+      .collection('users')
+      .doc(user.uid)
+      .collection('recentResults')
+      .doc(codiId)
+      .update({ clothingItems: nextItems });
+
+    if (nextItems[editingItemIndex].closetItemId) {
+      await firestore()
+        .collection('users')
+        .doc(user.uid)
+        .collection('closet')
+        .doc(nextItems[editingItemIndex].closetItemId as string)
+        .update({
+          productName: product.productName || '',
+          productPrice: product.productPrice || 0,
+          productUrl: product.productUrl || '',
+          shopName: product.shopName || '',
+          productSize: product.productSize || '',
+        });
+    }
+
+    // 위시리스트에 이미 담겨 있던 항목도 상품명 등 최신 정보로 동기화
+    await syncWishlistProductInfo({
+      userId: user.uid,
+      imageUrl: nextItems[editingItemIndex].imageUrl,
+      closetItemId: nextItems[editingItemIndex].closetItemId,
+      productUrl: product.productUrl || nextItems[editingItemIndex].productUrl,
+      product,
+    });
+
+    setClothingItems(nextItems);
+    setProductModalVisible(false);
+    setEditingItemIndex(null);
+    Toast.show({ type: 'success', text1: t('productInfoSaved') });
+  };
+
+  const handleAddItemToWishlist = async (item: CodiClothingItem) => {
+    if (!user) {
+      return;
+    }
+
+    await addToWishlist({
+      userId: user.uid,
+      imageUrl: item.imageUrl,
+      product: item,
+      closetItemId: item.closetItemId,
+      codiId,
+    });
+
+    Toast.show({ type: 'success', text1: t('wishlistAdded') });
+  };
+
+  const handleAddAllToWishlist = async () => {
+    if (!user) {
+      return;
+    }
+
+    const addedCount = await addCodiItemsToWishlist({
+      userId: user.uid,
+      codiId,
+      items: clothingItems,
+    });
+
+    Toast.show({
+      type: 'success',
+      text1: t('wishlistBulkAdded', { count: addedCount }),
+    });
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <StatusBar barStyle="dark-content" />
 
       {/* 헤더 */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}>
@@ -369,67 +595,165 @@ const CodiDetailScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* 이미지 영역 */}
-      <View style={styles.imageContainer}>
-        <View ref={imageRef} collapsable={false} style={styles.captureContainer}>
-          {imageLoading && (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#FFFFFF" />
-            </View>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        bounces>
+        {/* 이미지 영역 */}
+        <View
+          style={[
+            styles.imageContainer,
+            isCapturing && { height: screenHeight * 0.75, backgroundColor: '#000000' },
+          ]}>
+          <View
+            ref={imageRef}
+            collapsable={false}
+            style={[
+              styles.captureContainer,
+              isCapturing && { backgroundColor: '#000000' },
+            ]}>
+            {imageLoading && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
+              </View>
+            )}
+
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.fullImage}
+              resizeMode="contain"
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => setImageLoading(false)}
+            />
+            {/* CodiPop 바이럴 워터마크 배너 (QR코드 + 초대코드 합성) - 상시 마운트로 로고 캐시 유지 */}
+            <CodiPopViralWatermark referralCode={userReferralCode} isVisible={isCapturing} />
+          </View>
+        </View>
+
+        <View style={styles.shoppingSection}>
+          <View style={styles.shoppingHeader}>
+            <Text style={styles.shoppingTitle}>{t('shoppingCardsTitle')}</Text>
+            {totalPrice > 0 && (
+              <Text style={styles.totalPriceText}>
+                {t('estimatedTotalPrice', { price: totalPrice.toLocaleString() })}
+              </Text>
+            )}
+          </View>
+
+          {clothingItems.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled>
+              {clothingItems.map((item, index) => (
+                <View key={`${item.imageUrl}-${index}`} style={styles.productCard}>
+                  <Image source={{ uri: item.imageUrl }} style={styles.productImage} />
+                  <Text style={styles.productName} numberOfLines={1}>
+                    {item.productName || t('productNameMissing')}
+                  </Text>
+                  <Text style={styles.productMeta} numberOfLines={1}>
+                    {item.shopName || t('shopNameMissing')}
+                  </Text>
+                  {item.productPrice ? (
+                    <Text style={styles.productPrice}>
+                      {item.productPrice.toLocaleString()}원
+                    </Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={styles.productAction}
+                    onPress={() => handleOpenProduct(item.productUrl)}>
+                    <Text style={styles.productActionText}>{t('buyNow')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.secondaryAction}
+                    onPress={() => handleAddItemToWishlist(item)}>
+                    <Text style={styles.secondaryActionText}>{t('addToWishlist')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.secondaryAction}
+                    onPress={() => {
+                      setEditingItemIndex(index);
+                      setProductModalVisible(true);
+                    }}>
+                    <Text style={styles.secondaryActionText}>{t('editProductInfo')}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.emptyShoppingText}>{t('shoppingCardsEmpty')}</Text>
           )}
 
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.fullImage}
-            resizeMode="contain"
-            onLoadStart={() => setImageLoading(true)}
-            onLoadEnd={() => setImageLoading(false)}
-          />
-          {/* 워터마크 이미지 - 캡처할 때만 표시됨 */}
-          {isCapturing && (
-            <View style={styles.watermarkContainer} pointerEvents="none">
-              <Image
-                source={require('../assets/images/watermark.png')}
-                style={styles.watermarkImage}
-                resizeMode="contain"
-              />
-            </View>
+          {clothingItems.length > 0 && (
+            <TouchableOpacity style={styles.wishlistAllButton} onPress={handleAddAllToWishlist}>
+              <Text style={styles.wishlistAllText}>{t('addAllToWishlist')}</Text>
+            </TouchableOpacity>
           )}
         </View>
-      </View>
 
-      {/* 하단 버튼 영역 */}
-      <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + 20 }]}>
-        <TouchableOpacity
-          onPress={handleDownload}
-          disabled={loading}
-          activeOpacity={0.8}
-          style={styles.downloadButtonContainer}>
-          <LinearGradient
-            colors={['#FF6B9D', '#8B5CF6']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.downloadButton}>
-            <View style={styles.downloadButtonContent}>
-              {loading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Text style={styles.downloadIcon}>📥</Text>
-                  <Text style={styles.downloadButtonText}>{t('download')}</Text>
-                </>
-              )}
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
+        {/* 하단 버튼 영역 */}
+        <View style={styles.bottomContainer}>
+          <TouchableOpacity
+            style={styles.communityShareButton}
+            onPress={handleShareToCommunity}
+            disabled={sharingCommunity}
+            activeOpacity={0.85}>
+            {sharingCommunity ? (
+              <ActivityIndicator size="small" color="#6A0DAD" />
+            ) : (
+              <Text style={styles.communityShareText}>{t('communityShareFromCodi')}</Text>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleDelete}>
-          <Text style={styles.deleteIcon}>🗑️</Text>
-          <Text style={styles.deleteButtonText}>{t('delete')}</Text>
-        </TouchableOpacity>
-      </View>
+          <View style={styles.bottomRow}>
+            <TouchableOpacity
+              onPress={handleDownload}
+              disabled={loading}
+              activeOpacity={0.8}
+              style={styles.downloadButtonContainer}>
+              <LinearGradient
+                colors={['#FF6B9D', '#8B5CF6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.downloadButton}>
+                <View style={styles.downloadButtonContent}>
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Text style={styles.downloadIcon}>📥</Text>
+                      <Text style={styles.downloadButtonText}>{t('download')}</Text>
+                    </>
+                  )}
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={handleDelete}>
+              <Text style={styles.deleteIcon}>🗑️</Text>
+              <Text style={styles.deleteButtonText}>{t('delete')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+
+      <ProductInfoModal
+        visible={productModalVisible}
+        initialValue={
+          editingItemIndex !== null ? clothingItems[editingItemIndex] : undefined
+        }
+        onClose={() => {
+          setProductModalVisible(false);
+          setEditingItemIndex(null);
+        }}
+        onSave={handleSaveProductInfo}
+      />
     </SafeAreaView>
   );
 };
@@ -439,13 +763,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
   },
   backButton: {
     padding: 8,
@@ -471,7 +801,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   imageContainer: {
-    flex: 1,
+    height: screenHeight * 0.38,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -496,14 +826,31 @@ const styles = StyleSheet.create({
   },
   fullImage: {
     width: screenWidth,
-    height: screenHeight * 0.7,
+    height: '100%',
   },
   bottomContainer: {
-    flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingVertical: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    gap: 10,
+  },
+  bottomRow: {
+    flexDirection: 'row',
     gap: 12,
+  },
+  communityShareButton: {
+    borderWidth: 1.5,
+    borderColor: '#6A0DAD',
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8F1FC',
+  },
+  communityShareText: {
+    color: '#6A0DAD',
+    fontSize: 14,
+    fontWeight: '700',
   },
   downloadButtonContainer: {
     flex: 1.2, // 다운로드 버튼 너비를 조금 더 늘림 (1 → 1.2)
@@ -573,6 +920,99 @@ const styles = StyleSheet.create({
   watermarkImage: {
     width: 80,
     height: 30,
+  },
+  shoppingSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FAFAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#EFEFF4',
+  },
+  shoppingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  shoppingTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#222',
+  },
+  totalPriceText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6A0DAD',
+  },
+  productCard: {
+    width: 160,
+    marginRight: 12,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#EEE',
+  },
+  productImage: {
+    width: '100%',
+    height: 100,
+    borderRadius: 10,
+    marginBottom: 8,
+    backgroundColor: '#F4F4F4',
+  },
+  productName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
+  },
+  productMeta: {
+    fontSize: 11,
+    color: '#777',
+    marginTop: 2,
+  },
+  productPrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6A0DAD',
+    marginTop: 6,
+  },
+  productAction: {
+    marginTop: 8,
+    backgroundColor: '#6A0DAD',
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  productActionText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  secondaryAction: {
+    marginTop: 6,
+    alignItems: 'center',
+  },
+  secondaryActionText: {
+    color: '#6A0DAD',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  emptyShoppingText: {
+    fontSize: 13,
+    color: '#777',
+  },
+  wishlistAllButton: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    backgroundColor: '#F3E8FF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  wishlistAllText: {
+    color: '#6A0DAD',
+    fontWeight: '700',
+    fontSize: 12,
   },
 });
 

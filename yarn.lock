@@ -1201,12 +1201,7 @@
     pirates "^4.0.6"
     source-map-support "^0.5.16"
 
-"@babel/runtime@^7.12.5":
-  version "7.28.4"
-  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.28.4.tgz#a70226016fabe25c5783b2f22d3e1c9bc5ca3326"
-  integrity sha512-Q/N6JNWvIvPnLDvjlE1OUBLPQHH6l3CltCEsHIujp45zQUSSh8K+gHnaEX45yAT1nyngnINhvWtzN+Nb9D8RAQ==
-
-"@babel/runtime@^7.25.0", "@babel/runtime@^7.27.6", "@babel/runtime@^7.28.3":
+"@babel/runtime@^7.12.5", "@babel/runtime@^7.25.0", "@babel/runtime@^7.27.6", "@babel/runtime@^7.28.3":
   version "7.28.3"
   resolved "https://registry.npmjs.org/@babel/runtime/-/runtime-7.28.3.tgz"
   integrity sha512-9uIQ10o0WGdpP6GDhXcdOJPJuDgFtIDtN/9+ArJQ2NAfAmiuhTQdzkaTGR33v43GYS2UrSA0eX2pPPHoFVvpxA==
@@ -1769,7 +1764,7 @@
 
 "@iabtcf/core@^1.5.3":
   version "1.5.6"
-  resolved "https://registry.yarnpkg.com/@iabtcf/core/-/core-1.5.6.tgz#92568d89252fbf205aa65836703cb0a52e812382"
+  resolved "https://registry.npmjs.org/@iabtcf/core/-/core-1.5.6.tgz"
   integrity sha512-u2q9thI9vLurYZdGtyJsDYOqoeLc4EgQsYGSc+UVibYII61B/ENJPZS6eFlML1F0hSoTR/goptpo5nGRDkKd2w==
 
 "@invertase/react-native-apple-authentication@2.3.0":
@@ -2058,6 +2053,11 @@
   dependencies:
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
+
+"@notifee/react-native@^9.1.8":
+  version "9.1.8"
+  resolved "https://registry.yarnpkg.com/@notifee/react-native/-/react-native-9.1.8.tgz#3d55cb3fbcc21f9e35931e366afdf64b294da891"
+  integrity sha512-Az/dueoPerJsbbjRxu8a558wKY+gONUrfoy3Hs++5OqbeMsR0dYe6P+4oN6twrLFyzAhEA1tEoZRvQTFDRmvQg==
 
 "@protobufjs/aspromise@^1.1.1", "@protobufjs/aspromise@^1.1.2":
   version "1.1.2"
@@ -2685,6 +2685,11 @@
   version "15.7.15"
   resolved "https://registry.npmjs.org/@types/prop-types/-/prop-types-15.7.15.tgz"
   integrity sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==
+
+"@types/qrcode-generator@^0.0.16":
+  version "0.0.16"
+  resolved "https://registry.npmjs.org/@types/qrcode-generator/-/qrcode-generator-0.0.16.tgz"
+  integrity sha512-i+wPpeHH64qJHUIz51+tPq5FRkgMxE9/uhDE5eSlj3qujIjHm3U1wHfy8nMD/m1VKaXHO/uDjHamPVz2Fr4IPA==
 
 "@types/react-native@^0.73.0":
   version "0.73.0"
@@ -3851,7 +3856,7 @@ depd@2.0.0:
 
 dequal@^2.0.2:
   version "2.0.3"
-  resolved "https://registry.yarnpkg.com/dequal/-/dequal-2.0.3.tgz#2644214f1997d39ed0ee0ece72335490a7ac67be"
+  resolved "https://registry.npmjs.org/dequal/-/dequal-2.0.3.tgz"
   integrity sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==
 
 destroy@1.2.0:
@@ -5004,7 +5009,7 @@ internal-slot@^1.1.0:
     hasown "^2.0.2"
     side-channel "^1.1.0"
 
-invariant@^2.2.4:
+invariant@2.2.4, invariant@^2.2.4:
   version "2.2.4"
   resolved "https://registry.npmjs.org/invariant/-/invariant-2.2.4.tgz"
   integrity sha512-phJfQVBuaJM5raOpJjSfkiD6BpbCE4Ns//LaXl6wGYtUBY83nWS6Rf9tXm2e8VaK60JEjYldbPif/A2B1C2gNA==
@@ -6938,6 +6943,11 @@ pure-rand@^6.0.0:
   resolved "https://registry.npmjs.org/pure-rand/-/pure-rand-6.1.0.tgz"
   integrity sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==
 
+qrcode-generator@^2.0.4:
+  version "2.0.4"
+  resolved "https://registry.npmjs.org/qrcode-generator/-/qrcode-generator-2.0.4.tgz"
+  integrity sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==
+
 qs@6.13.0:
   version "6.13.0"
   resolved "https://registry.npmjs.org/qs/-/qs-6.13.0.tgz"
@@ -7056,7 +7066,7 @@ react-native-gesture-handler@^2.29.1:
 
 react-native-google-mobile-ads@^14.0.0:
   version "14.11.0"
-  resolved "https://registry.yarnpkg.com/react-native-google-mobile-ads/-/react-native-google-mobile-ads-14.11.0.tgz#f3d452fd922cc157a9b8fdd97a4b9e969e51f940"
+  resolved "https://registry.npmjs.org/react-native-google-mobile-ads/-/react-native-google-mobile-ads-14.11.0.tgz"
   integrity sha512-OWCuk4fR7eLyQT4u2A98tAdgTTFA5/QXUxQEt89LtBJUSALh/Go3wye7X+259b/lszbOOFMxojpPFIMSKeCXmQ==
   dependencies:
     "@iabtcf/core" "^1.5.3"
@@ -7099,6 +7109,11 @@ react-native-reanimated@~3.16.0:
     convert-source-map "^2.0.0"
     invariant "^2.2.4"
 
+react-native-receive-sharing-intent@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.npmjs.org/react-native-receive-sharing-intent/-/react-native-receive-sharing-intent-2.0.0.tgz"
+  integrity sha512-JFSO8mZm/hU0EJQYhC5z2m1iiMwJhD9CQ/hYQ8t1UQ9mQynoS/yo+hjX2T6hFXa8mtzlwO/BFwKZjBaVNPdWuw==
+
 react-native-safe-area-context@^5.6.2:
   version "5.6.2"
   resolved "https://registry.npmjs.org/react-native-safe-area-context/-/react-native-safe-area-context-5.6.2.tgz"
@@ -7130,6 +7145,14 @@ react-native-view-shot@^4.0.3:
   integrity sha512-USNjYmED7C0me02c1DxKA0074Hw+y/nxo+xJKlffMvfUWWzL5ELh/TJA/pTnVqFurIrzthZDPtDM7aBFJuhrHQ==
   dependencies:
     html2canvas "^1.4.1"
+
+react-native-webview@^14.0.1:
+  version "14.0.1"
+  resolved "https://registry.npmjs.org/react-native-webview/-/react-native-webview-14.0.1.tgz"
+  integrity sha512-lBUuvFk459Mo+5vUNqwzGvn+I8rDJE6zvOulG2hWWudeEOJfWTsQwOfuYnRu+27djUIXrESFfC+EQE3PGu+FWA==
+  dependencies:
+    escape-string-regexp "^4.0.0"
+    invariant "2.2.4"
 
 react-native-worklets-core@^1.6.2:
   version "1.6.2"
@@ -8230,7 +8253,7 @@ uri-js@^4.2.2:
 
 use-deep-compare-effect@^1.8.1:
   version "1.8.1"
-  resolved "https://registry.yarnpkg.com/use-deep-compare-effect/-/use-deep-compare-effect-1.8.1.tgz#ef0ce3b3271edb801da1ec23bf0754ef4189d0c6"
+  resolved "https://registry.npmjs.org/use-deep-compare-effect/-/use-deep-compare-effect-1.8.1.tgz"
   integrity sha512-kbeNVZ9Zkc0RFGpfMN3MNfaKNvcLNyxOAAd9O4CBZ+kCBXXscn9s/4I+8ytUER4RDpEYs5+O6Rs4PqiZ+rHr5Q==
   dependencies:
     "@babel/runtime" "^7.12.5"

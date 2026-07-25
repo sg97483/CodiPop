@@ -2,7 +2,6 @@
 
 import React, {useState, useEffect, useMemo} from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -16,26 +15,39 @@ import {useNavigation, useIsFocused} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import {useTranslation} from 'react-i18next';
+import Toast from 'react-native-toast-message';
+import ProductInfoModal from '../components/ProductInfoModal';
+import { updateClosetProductInfo } from '../services/closetService';
+import { getBodySizeProfile } from '../services/bodySizeService';
+import { recommendClothingSize } from '../services/sizeRecommendService';
+import type { ClosetItemRecord } from '../types/shopping';
+import type { BodySizeProfile } from '../types/bodySize';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/types';
+import { CompositeNavigationProp } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { MainTabParamList } from '../navigators/MainTabNavigator';
 
 const CATEGORIES = ['ALL', 'TOPS', 'BOTTOMS', 'SHOES', 'OUTER'];
 const MAX_CLOSET_ITEMS = 30; // 옷장 최대 아이템 개수
 
-type ClosetScreenNavigationProp = {
-  navigate: (screen: 'VirtualFitting', params?: {clothingUrl: string}) => void;
-};
+type ClosetScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Closet'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
-interface ClosetItem {
-  id: string;
-  imageUrl: string;
-  category?: string;
-}
+interface ClosetItem extends ClosetItemRecord {}
 
 const ClosetScreen = () => {
   const navigation = useNavigation<ClosetScreenNavigationProp>();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [closetItems, setClosetItems] = useState<ClosetItem[]>([]);
+  const [editingItem, setEditingItem] = useState<ClosetItem | null>(null);
+  const [productModalVisible, setProductModalVisible] = useState(false);
   const user = auth().currentUser;
   const [imageLoading, setImageLoading] = useState<{[key: string]: boolean}>(
     {},
@@ -45,6 +57,16 @@ const ClosetScreen = () => {
   );
 
   const [activeCategory, setActiveCategory] = useState('ALL');
+  const [bodyProfile, setBodyProfile] = useState<BodySizeProfile | null>(null);
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+    getBodySizeProfile()
+      .then(setBodyProfile)
+      .catch(() => setBodyProfile(null));
+  }, [isFocused]);
 
   useEffect(() => {
     if (isFocused && user) {
@@ -72,6 +94,12 @@ const ClosetScreen = () => {
                 id: documentSnapshot.id,
                 imageUrl: data.imageUrl,
                 category: data.category,
+                productName: data.productName,
+                productPrice: data.productPrice,
+                productUrl: data.productUrl,
+                shopName: data.shopName,
+                productSize: data.productSize,
+                source: data.source,
               });
             });
             
@@ -107,6 +135,36 @@ const ClosetScreen = () => {
     navigation.navigate('VirtualFitting', {clothingUrl: imageUrl});
   };
 
+  const handleItemLongPress = (item: ClosetItem) => {
+    setEditingItem(item);
+    setProductModalVisible(true);
+  };
+
+  const handleSaveProductInfo = async (product: {
+    productName?: string;
+    productPrice?: number;
+    productUrl?: string;
+    shopName?: string;
+    productSize?: string;
+  }) => {
+    if (!editingItem) {
+      return;
+    }
+
+    await updateClosetProductInfo({
+      closetItemId: editingItem.id,
+      product,
+    });
+
+    setClosetItems(prev =>
+      prev.map(item =>
+        item.id === editingItem.id ? { ...item, ...product } : item,
+      ),
+    );
+    setProductModalVisible(false);
+    setEditingItem(null);
+    Toast.show({ type: 'success', text1: t('productInfoSaved') });
+  };
 
   // 잘못된 로컬 파일 경로를 가진 아이템들을 정리하는 함수
   const cleanupInvalidItems = async () => {
@@ -180,23 +238,51 @@ const ClosetScreen = () => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, {paddingTop: insets.top}]}>
         <View style={styles.headerContainer}>
           <Text style={styles.headerTitle}>내 옷장</Text>
         </View>
         <ActivityIndicator style={{flex: 1}} size="large" />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, {paddingTop: insets.top}]}>
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>내 옷장</Text>
-        <Text style={styles.itemCountText}>
-          {closetItems.length}/{MAX_CLOSET_ITEMS}개
-        </Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.mallEntryButton}
+            onPress={() => navigation.navigate('MallList')}>
+            <Text style={styles.mallEntryText}>{t('mallSitesTitle')}</Text>
+          </TouchableOpacity>
+          <Text style={styles.itemCountText}>
+            {closetItems.length}/{MAX_CLOSET_ITEMS}개
+          </Text>
+        </View>
       </View>
+
+      <TouchableOpacity
+        style={styles.sizeTipBanner}
+        onPress={() => navigation.navigate('BodySize')}
+        activeOpacity={0.85}>
+        {bodyProfile ? (
+          <>
+            <Text style={styles.sizeTipTitle}>
+              {t('sizeRecommendLabel', {
+                size: recommendClothingSize(bodyProfile).recommendedSize,
+              })}
+            </Text>
+            <Text style={styles.sizeTipSub}>{t('sizeTipEdit')}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.sizeTipTitle}>{t('sizeTipEmptyTitle')}</Text>
+            <Text style={styles.sizeTipSub}>{t('sizeTipEmptySub')}</Text>
+          </>
+        )}
+      </TouchableOpacity>
 
       <View style={styles.categoryContainer}>
         <FlatList
@@ -235,7 +321,8 @@ const ClosetScreen = () => {
               <View style={styles.gridItem}>
                 <TouchableOpacity
                   style={styles.imagePressable}
-                  onPress={() => handleItemPress(item.imageUrl)}>
+                  onPress={() => handleItemPress(item.imageUrl)}
+                  onLongPress={() => handleItemLongPress(item)}>
                   <Image
                     source={{uri: item.imageUrl}}
                     style={styles.closetImage}
@@ -273,6 +360,25 @@ const ClosetScreen = () => {
                     </View>
                   )}
                 </TouchableOpacity>
+                {item.productName ? (
+                  <Text style={styles.productBadge} numberOfLines={1}>
+                    {item.productName}
+                  </Text>
+                ) : null}
+                {item.productSize ? (
+                  <Text style={styles.sizeBadge} numberOfLines={1}>
+                    {bodyProfile
+                      ? t('sizeItemCompare', {
+                          product: item.productSize,
+                          recommended: recommendClothingSize({
+                            ...bodyProfile,
+                            category: item.category,
+                            productSize: item.productSize,
+                          }).recommendedSize,
+                        })
+                      : t('sizeItemOnly', { size: item.productSize })}
+                  </Text>
+                ) : null}
               <TouchableOpacity
                 style={styles.deleteButton}
                 onPress={() => handleDeleteItem(item.id)}>
@@ -304,7 +410,17 @@ const ClosetScreen = () => {
           </TouchableOpacity>
         </View>
       )}
-    </SafeAreaView>
+
+      <ProductInfoModal
+        visible={productModalVisible}
+        initialValue={editingItem || undefined}
+        onClose={() => {
+          setProductModalVisible(false);
+          setEditingItem(null);
+        }}
+        onSave={handleSaveProductInfo}
+      />
+    </View>
   );
 };
 
@@ -314,20 +430,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   headerContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 12,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
   },
+  headerRight: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  mallEntryButton: {
+    backgroundColor: '#1F1A17',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  mallEntryText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   itemCountText: {
     fontSize: 12,
     color: '#666',
-    marginTop: 2,
     textAlign: 'center',
   },
   categoryContainer: {
@@ -397,6 +528,54 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontSize: 16,
+  },
+  productBadge: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    right: 36,
+    backgroundColor: 'rgba(106, 13, 173, 0.85)',
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  sizeBadge: {
+    position: 'absolute',
+    left: 8,
+    top: 8,
+    maxWidth: '70%',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  sizeTipBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: '#F7F3FB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E8D7F5',
+  },
+  sizeTipTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4A1A7A',
+  },
+  sizeTipSub: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#7A6A8A',
   },
   emptyContainer: {
     flex: 1,

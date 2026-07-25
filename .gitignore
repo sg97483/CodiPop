@@ -81,3 +81,12 @@ yarn-error.log
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Temp & Backup files
+*.backup
+*.bak
+build_error.txt
+temp_aab_*
+temp_check/
+src/assets/icons/_preview/
+

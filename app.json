@@ -1,4 +1,7 @@
 {
   "name": "CodiPop",
-  "displayName": "CodiPop"
+  "displayName": "CodiPop",
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-6990308526694074~9247918170"
+  }
 }

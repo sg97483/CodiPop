@@ -14,7 +14,6 @@ import {
   Platform,
   PermissionsAndroid,
   Linking,
-  ScrollView,
   Animated as RNAnimated,
   Dimensions,
   Share,
@@ -34,25 +33,51 @@ import Toast from 'react-native-toast-message';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import RNFS from 'react-native-fs';
 import { useActionSheet } from '@expo/react-native-action-sheet';
-import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
 import { captureRef } from 'react-native-view-shot';
 import { check, request, PERMISSIONS, RESULTS, openSettings, Permission } from 'react-native-permissions';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // import Share from 'react-native-share'; // ❌ 충돌 발생으로 제거
-import { RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
+import { AdEventType, RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
+import { CLOSET_FILTER_CATEGORIES, ClosetSaveCategory, MAX_CLOSET_ITEMS } from '../constants/closet';
+import {
+  ClosetFullError,
+  saveClosetItem,
+} from '../services/closetService';
+import {
+  buildClothingItemsFromSelection,
+  saveCodiResult,
+} from '../services/codiPresetsService';
+import type { ClosetItemRecord } from '../types/shopping';
+import type { BodySizeProfile } from '../types/bodySize';
+import { getBodySizeProfile } from '../services/bodySizeService';
+import {
+  getTicketBalance,
+  addTickets,
+  deductTickets,
+  isDevBypassUser,
+  getUserReferralCode,
+  TICKET_COST_FITTING,
+  TICKET_REWARD_AD,
+} from '../services/ticketService';
+import { CodiPopLoadingAnimation } from '../components/CodiPopLoadingAnimation';
+import { CodiPopViralWatermark } from '../components/CodiPopViralWatermark';
 
-const adUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxxxxxx/yyyyyyyyyy';
+const adUnitId = __DEV__
+  ? TestIds.REWARDED
+  : Platform.OS === 'ios'
+  ? 'ca-app-pub-6990308526694074/4347779439'
+  : 'ca-app-pub-6990308526694074/7899285287';
 
 const rewarded = RewardedAd.createForAdRequest(adUnitId, {
   requestNonPersonalizedAdsOnly: true,
 });
 
-const CATEGORIES = ['ALL', 'TOPS', 'BOTTOMS', 'SHOES', 'OUTER'];
+const CATEGORIES = [...CLOSET_FILTER_CATEGORIES];
 const MAX_CLOTHING_SELECTION = 2; // 최대 옷 선택 개수
-const MAX_CLOSET_ITEMS = 30; // 옷장 최대 아이템 개수
-const MAX_DAILY_FITTING = 1; // 하루 최대 이미지 합성 횟수 (테스트용)
+const MAX_DAILY_FITTING = 5; // 하루 최대 이미지 합성 횟수 (레거시 호환 유지)
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_MARGIN = 4;
@@ -69,11 +94,7 @@ enum WorkthroughStep {
 }
 
 // ✅ ClosetItem 타입을 파일 상단에 정의하여 재사용합니다.
-interface ClosetItem {
-  id: string;
-  imageUrl: string;
-  category?: string; // 카테고리 필드는 선택적
-}
+type ClosetItem = ClosetItemRecord;
 
 interface GridItem {
   id: string;
@@ -85,11 +106,12 @@ interface GridItem {
 const VirtualFittingScreen = () => {
   const navigation = useNavigation<any>();
   const route =
-    useRoute<RouteProp<{ params: { clothingUrl?: string } }, 'params'>>();
+    useRoute<RouteProp<{ params: { clothingUrl?: string; clothingUrls?: string[] } }, 'params'>>();
   const isFocused = useIsFocused();
   const user = auth().currentUser;
   const { showActionSheetWithOptions } = useActionSheet(); // ✅ 훅 사용
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   const [personImage, setPersonImage] = useState<string | null>(null);
   const [resultImage, setResultImage] = useState<string | null>(null);
@@ -102,6 +124,7 @@ const VirtualFittingScreen = () => {
   const [selectedClothingImages, setSelectedClothingImages] = useState<string[]>([]);
   const [isPanelExpanded, setIsPanelExpanded] = useState(false);
   const [workthroughStep, setWorkthroughStep] = useState<WorkthroughStep>(WorkthroughStep.NONE);
+  const [bodyProfile, setBodyProfile] = useState<BodySizeProfile | null>(null);
 
   const fadeAnim = useRef(new RNAnimated.Value(0)).current;
   const slideUpAnim = useRef(new RNAnimated.Value(0)).current; // 하단 영역 슬라이드 업 애니메이션
@@ -110,55 +133,123 @@ const VirtualFittingScreen = () => {
   const [imageLoading, setImageLoading] = useState<{ [key: string]: boolean }>(
     {},
   ); // ✅ 이미지 로딩 state 추가
-  const [remainingCount, setRemainingCount] = useState<number>(MAX_DAILY_FITTING); // 남은 일일 사용 횟수
+  const [ticketBalance, setTicketBalance] = useState<number>(0); // 보유 스타일 티켓
+  const [remainingCount, setRemainingCount] = useState<number>(MAX_DAILY_FITTING); // 레거시 호환 유지
+  const [userReferralCode, setUserReferralCode] = useState<string>('CODI20');
   const [isAdLoaded, setIsAdLoaded] = useState(false);
+  const pendingAdRewardTypeRef = useRef<'RECHARGE' | 'HD_DOWNLOAD'>('RECHARGE');
 
   // 광고 로드 및 이벤트 리스너 설정
   useEffect(() => {
     const unsubscribeLoaded = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
       setIsAdLoaded(true);
     });
+    
     const unsubscribeEarned = rewarded.addAdEventListener(
       RewardedAdEventType.EARNED_REWARD,
       reward => {
         console.log('User earned reward of ', reward);
-        // 보상 지급: 사용 횟수 1회 차감 (즉, 1회 충전)
-        decreaseDailyUsageCount().then(() => {
-          checkDailyUsage().then(({ remainingCount }) => {
-            setRemainingCount(remainingCount);
-            Toast.show({ type: 'success', text1: '1회 충전 완료! 🎉', text2: '이제 다시 피팅해 보세요!' });
+        if (pendingAdRewardTypeRef.current === 'HD_DOWNLOAD') {
+          pendingAdRewardTypeRef.current = 'RECHARGE';
+          Toast.show({
+            type: 'success',
+            text1: '광고 시청 완료! ✨',
+            text2: '워터마크 없는 HD 원본 저장을 시작합니다.',
           });
-        });
+          processDownloadImage(false);
+        } else {
+          // 보상 지급: 티켓 +3장 충전 (2단계 수익화 적용)
+          addTickets(TICKET_REWARD_AD, 'REWARD_AD').then(newBalance => {
+            setTicketBalance(newBalance);
+            Toast.show({
+              type: 'success',
+              text1: `+${TICKET_REWARD_AD}장 충전 완료! 🎉`,
+              text2: `현재 보유 티켓: ${newBalance}장 (1회 피팅 10장 소모)`,
+            });
+          });
+          decreaseDailyUsageCount(); // 레거시 일일 횟수도 함께 완화
+        }
       },
     );
 
-    // 광고 로드
+    // 광고가 닫힌 후 상태 리셋 및 다시 로드
+    const unsubscribeClosed = rewarded.addAdEventListener(
+      AdEventType.CLOSED,
+      () => {
+        console.log('Rewarded ad closed');
+        pendingAdRewardTypeRef.current = 'RECHARGE';
+        setIsAdLoaded(false);
+        rewarded.load();
+      },
+    );
+
+    // 로드 실패 시 자동 재시도
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribeError = rewarded.addAdEventListener(
+      AdEventType.ERROR,
+      error => {
+        console.error('보상형 광고 로드 실패:', error);
+        pendingAdRewardTypeRef.current = 'RECHARGE';
+        setIsAdLoaded(false);
+        if (retryTimer) {
+          clearTimeout(retryTimer);
+        }
+        retryTimer = setTimeout(() => {
+          rewarded.load();
+        }, 30000);
+      },
+    );
+
     rewarded.load();
 
     return () => {
       unsubscribeLoaded();
       unsubscribeEarned();
+      unsubscribeClosed();
+      unsubscribeError();
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
     };
   }, []);
 
   // 광고 보여주기 함수
-  const showRewardAd = () => {
-    if (isAdLoaded) {
-      rewarded.show();
-    } else {
-      Toast.show({ type: 'error', text1: '광고 준비 중', text2: '잠시 후 다시 시도해 주세요.' });
-      rewarded.load(); // 다시 로드 시도
+  const showRewardAd = async (rewardType: 'RECHARGE' | 'HD_DOWNLOAD' = 'RECHARGE') => {
+    pendingAdRewardTypeRef.current = rewardType;
+    try {
+      if (isAdLoaded) {
+        await rewarded.show();
+      } else {
+        Toast.show({ type: 'error', text1: '광고 준비 중', text2: '잠시 후 다시 시도해 주세요.' });
+        rewarded.load();
+      }
+    } catch (error) {
+      console.error('광고 표시 실패:', error);
+      Toast.show({ type: 'error', text1: '광고 표시 실패', text2: '잠시 후 다시 시도해 주세요.' });
+      pendingAdRewardTypeRef.current = 'RECHARGE';
+      setIsAdLoaded(false);
+      rewarded.load();
     }
   };
 
-  // 워크스루 초기화 - 화면 포커스 시 체크
+  // 워크스루 및 티켓 잔액 초기화 - 화면 포커스 시 체크
   useEffect(() => {
     if (isFocused) {
       checkAndStartWorkthrough();
-      // 남은 일일 사용 횟수 업데이트
+      getTicketBalance().then(balance => {
+        setTicketBalance(balance);
+      });
       checkDailyUsage().then(({ remainingCount }) => {
         setRemainingCount(remainingCount);
       });
+      getUserReferralCode().then(code => {
+        if (code) setUserReferralCode(code);
+      });
+      try {
+        Image.prefetch(Image.resolveAssetSource(require('../assets/images/codipop_logo.png')).uri);
+      } catch (e) {
+        console.warn('Logo prefetch error:', e);
+      }
     }
   }, [isFocused]);
 
@@ -208,11 +299,35 @@ const VirtualFittingScreen = () => {
 
   // 옷장에서 아이템을 선택했을 때 clothingImage 자동 설정
   useEffect(() => {
-    if (isFocused && route.params?.clothingUrl) {
+    if (!isFocused) {
+      return;
+    }
+    if (route.params?.clothingUrls?.length) {
+      setSelectedClothingImages(
+        route.params.clothingUrls.slice(0, MAX_CLOTHING_SELECTION),
+      );
+      navigation.setParams({ clothingUrls: undefined, clothingUrl: undefined });
+      return;
+    }
+    if (route.params?.clothingUrl) {
       setSelectedClothingImages([route.params.clothingUrl]);
       navigation.setParams({ clothingUrl: undefined });
     }
-  }, [isFocused, route.params?.clothingUrl, navigation]);
+  }, [
+    isFocused,
+    route.params?.clothingUrl,
+    route.params?.clothingUrls,
+    navigation,
+  ]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+    getBodySizeProfile()
+      .then(setBodyProfile)
+      .catch(() => setBodyProfile(null));
+  }, [isFocused]);
 
   // Firestore에서 옷장 데이터 가져오기
   useEffect(() => {
@@ -225,9 +340,19 @@ const VirtualFittingScreen = () => {
         .orderBy('createdAt', 'desc')
         .onSnapshot(querySnapshot => {
           const items: ClosetItem[] = [];
-          querySnapshot.forEach(doc =>
-            items.push({ id: doc.id, ...(doc.data() as { imageUrl: string }) }),
-          );
+          querySnapshot.forEach(doc => {
+            const data = doc.data();
+            items.push({
+              id: doc.id,
+              imageUrl: data.imageUrl,
+              category: data.category,
+              productName: data.productName,
+              productPrice: data.productPrice,
+              productUrl: data.productUrl,
+              shopName: data.shopName,
+              source: data.source,
+            });
+          });
           setClosetItems(items);
           setLoadingCloset(false);
         });
@@ -254,19 +379,21 @@ const VirtualFittingScreen = () => {
 
   // 아이템 개수에 따른 패널 높이 계산
   const panelHeight = useMemo(() => {
-    const DRAG_HANDLE_HEIGHT = 50; // 드래그 핸들 높이
-    const CATEGORY_HEIGHT = 40; // 카테고리 영역 높이
-    const ROW_HEIGHT = ITEM_SIZE + ITEM_MARGIN * 2; // 각 줄 높이
-    const PADDING_TOP_BOTTOM = 10; // 상하 여백
-    const BOTTOM_PADDING = 12; // 하단 여백 (15 → 12)
-    const EXTRA_SPACE = 7; // 추가 여백 (10 → 7)
+    const DRAG_HANDLE_HEIGHT = 50;
+    const CATEGORY_HEIGHT = 44;
+    const ROW_HEIGHT = ITEM_SIZE + ITEM_MARGIN * 2;
+    const PADDING = 20;
 
-    const numRows = Math.ceil(gridItems.length / ITEMS_PER_ROW);
-    const itemsHeight = numRows * ROW_HEIGHT;
+    const numRows = Math.max(1, Math.ceil(gridItems.length / ITEMS_PER_ROW));
+    // 최대 3줄분 확보, 나머지는 스크롤
+    const visibleRows = Math.min(numRows, 3);
+    const itemsHeight = visibleRows * ROW_HEIGHT;
 
-    // 최소 높이 보장, 최대 높이 제한
-    const calculatedHeight = DRAG_HANDLE_HEIGHT + CATEGORY_HEIGHT + itemsHeight + PADDING_TOP_BOTTOM + BOTTOM_PADDING + EXTRA_SPACE;
-    return Math.max(200, Math.min(calculatedHeight, 350)); // 최소 200, 최대 350
+    const calculatedHeight =
+      DRAG_HANDLE_HEIGHT + CATEGORY_HEIGHT + itemsHeight + PADDING;
+
+    const maxHeight = Math.min(Math.round(Dimensions.get('window').height * 0.5), 420);
+    return Math.max(220, Math.min(calculatedHeight, maxHeight));
   }, [gridItems.length]);
 
   // 패널 translateY 계산 (높이의 대부분만 올라오도록)
@@ -276,7 +403,13 @@ const VirtualFittingScreen = () => {
 
   // 사람 이미지 선택 함수
   const handleSelectPerson = async () => {
-    const result = await launchImageLibrary({ mediaType: 'photo' });
+    // 업로드 전 리사이즈: 원본(수 MB) 대신 최대 1536px로 줄여 전송 시간 단축
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      maxWidth: 1536,
+      maxHeight: 1536,
+      quality: 0.8,
+    });
     if (result.assets && result.assets[0].uri) {
       setPersonImage(result.assets[0].uri);
       // 사람 이미지 선택 시 하단 영역이 위로 올라가는 애니메이션
@@ -312,17 +445,16 @@ const VirtualFittingScreen = () => {
     }
 
     try {
-      // 현재 옷장 아이템 개수 확인
-      const closetSnapshot = await firestore()
-        .collection('users')
-        .doc(user.uid)
-        .collection('closet')
-        .get();
+      const downloadUrl = await saveClosetItem({
+        imageUri: imageUrl,
+        category: category as ClosetSaveCategory,
+        source: 'gallery',
+      });
 
-      const currentItemCount = closetSnapshot.size;
-
-      // 30개 제한 확인
-      if (currentItemCount >= MAX_CLOSET_ITEMS) {
+      Toast.show({ type: 'success', text1: t('addedToCloset') });
+      setSelectedClothingImages([downloadUrl]);
+    } catch (error) {
+      if (error instanceof ClosetFullError) {
         Toast.show({
           type: 'error',
           text1: t('closetFull'),
@@ -331,23 +463,6 @@ const VirtualFittingScreen = () => {
         return;
       }
 
-      // Firebase Storage에 이미지 업로드
-      const downloadUrl = await uploadImageToStorage(imageUrl, 'closet');
-
-      // Firestore에 메타데이터 저장
-      await firestore()
-        .collection('users')
-        .doc(user.uid)
-        .collection('closet')
-        .add({
-          imageUrl: downloadUrl, // Firebase Storage URL 사용
-          category: category,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        });
-
-      Toast.show({ type: 'success', text1: t('addedToCloset') });
-      setSelectedClothingImages([downloadUrl]); // 저장 후 바로 선택 상태로
-    } catch (error) {
       console.error('옷장 저장 실패:', error);
       Toast.show({
         type: 'error',
@@ -359,36 +474,69 @@ const VirtualFittingScreen = () => {
 
   // 갤러리에서 새 옷을 선택하고 저장하는 함수
   const handleSelectClothing = async () => {
-    const result = await launchImageLibrary({ mediaType: 'photo' });
-    if (result.assets && result.assets[0].uri) {
-      const newClothingUrl = result.assets[0].uri;
+    const sourceOptions = [
+      t('mallFromGallery'),
+      t('mallFromShoppingSite'),
+      t('cancel'),
+    ];
+    const sourceCancelIndex = 2;
 
-      // ✅ [수정] Alert를 ActionSheet로 변경
-      const options = ['TOPS', 'BOTTOMS', 'SHOES', 'OUTER', '취소'];
-      const cancelButtonIndex = 4;
+    showActionSheetWithOptions(
+      {
+        options: sourceOptions,
+        cancelButtonIndex: sourceCancelIndex,
+        title: t('mallAddClothingTitle'),
+      },
+      async (sourceIndex?: number) => {
+        if (sourceIndex === undefined || sourceIndex === sourceCancelIndex) {
+          return;
+        }
 
-      showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex,
-          title: t('selectCategoryTitle'),
-        },
-        (selectedIndex?: number) => {
-          if (
-            selectedIndex !== undefined &&
-            selectedIndex !== cancelButtonIndex
-          ) {
-            const category = options[selectedIndex];
-            handleSaveToCloset(newClothingUrl, category);
-            setSelectedClothingImages([newClothingUrl]);
-          }
-        },
-      );
-    }
+        if (sourceIndex === 1) {
+          navigation.navigate('MallList' as never);
+          return;
+        }
+
+        // 업로드 전 리사이즈: 옷 이미지도 최대 1536px로 줄여 전송
+        const result = await launchImageLibrary({
+          mediaType: 'photo',
+          maxWidth: 1536,
+          maxHeight: 1536,
+          quality: 0.8,
+        });
+        if (result.assets && result.assets[0].uri) {
+          const newClothingUrl = result.assets[0].uri;
+
+          const options = ['TOPS', 'BOTTOMS', 'SHOES', 'OUTER', t('cancel')];
+          const cancelButtonIndex = 4;
+
+          showActionSheetWithOptions(
+            {
+              options,
+              cancelButtonIndex,
+              title: t('selectCategoryTitle'),
+            },
+            (selectedIndex?: number) => {
+              if (
+                selectedIndex !== undefined &&
+                selectedIndex !== cancelButtonIndex
+              ) {
+                const category = options[selectedIndex];
+                handleSaveToCloset(newClothingUrl, category);
+                setSelectedClothingImages([newClothingUrl]);
+              }
+            },
+          );
+        }
+      },
+    );
   };
 
   // 일일 사용 횟수 확인 및 관리 함수
   const checkDailyUsage = async (): Promise<{ canUse: boolean; remainingCount: number }> => {
+    if (isDevBypassUser()) {
+      return { canUse: true, remainingCount: 9999 };
+    }
     try {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 형식
       const storageKey = 'virtualFittingDailyUsage';
@@ -400,7 +548,16 @@ const VirtualFittingScreen = () => {
         return { canUse: true, remainingCount: MAX_DAILY_FITTING };
       }
 
-      const { date, count } = JSON.parse(storedData);
+      // JSON 파싱 안전 처리
+      let parsedData;
+      try {
+        parsedData = JSON.parse(storedData);
+      } catch (parseError) {
+        console.error('JSON 파싱 실패, 데이터 초기화:', parseError);
+        await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: 0 }));
+        return { canUse: true, remainingCount: MAX_DAILY_FITTING };
+      }
+      const { date, count } = parsedData;
 
       // 날짜가 다르면 리셋 (새로운 하루)
       if (date !== today) {
@@ -423,6 +580,9 @@ const VirtualFittingScreen = () => {
 
   // 일일 사용 횟수 증가 함수
   const incrementDailyUsage = async (): Promise<void> => {
+    if (isDevBypassUser()) {
+      return;
+    }
     try {
       const today = new Date().toISOString().split('T')[0];
       const storageKey = 'virtualFittingDailyUsage';
@@ -433,7 +593,16 @@ const VirtualFittingScreen = () => {
         return;
       }
 
-      const { date, count } = JSON.parse(storedData);
+      // JSON 파싱 안전 처리
+      let parsedData;
+      try {
+        parsedData = JSON.parse(storedData);
+      } catch (parseError) {
+        console.error('JSON 파싱 실패, 데이터 초기화:', parseError);
+        await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: 1 }));
+        return;
+      }
+      const { date, count } = parsedData;
 
       // 날짜가 다르면 새로 시작
       if (date !== today) {
@@ -450,17 +619,28 @@ const VirtualFittingScreen = () => {
 
   // 일일 사용 횟수 차감 함수 (보상 지급용)
   const decreaseDailyUsageCount = async (): Promise<void> => {
+    if (isDevBypassUser()) {
+      return;
+    }
     try {
       const today = new Date().toISOString().split('T')[0];
       const storageKey = 'virtualFittingDailyUsage';
       const storedData = await AsyncStorage.getItem(storageKey);
 
+      let count = 0;
       if (storedData) {
-        const { date, count } = JSON.parse(storedData);
-        if (date === today && count > 0) {
-          await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: count - 1 }));
+        try {
+          const parsedData = JSON.parse(storedData);
+          if (parsedData.date === today) {
+            count = parsedData.count;
+          }
+        } catch (parseError) {
+          console.error('JSON 파싱 실패:', parseError);
         }
       }
+      // 충전 시 count를 1 감소 (음수 허용하여 최대 10회 보유 = count -5 까지 가능)
+      const newCount = Math.max(-5, count - 1);
+      await AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: newCount }));
     } catch (error) {
       console.error('일일 사용 횟수 차감 실패:', error);
     }
@@ -473,25 +653,25 @@ const VirtualFittingScreen = () => {
       return;
     }
 
-    // 일일 사용 횟수 확인
-    const { canUse, remainingCount: currentRemaining } = await checkDailyUsage();
-    if (!canUse) {
-      setRemainingCount(0);
+    // 2단계 스타일 티켓 잔액 확인 및 차감 여부 검사
+    const currentBalance = await getTicketBalance();
+    if (currentBalance < TICKET_COST_FITTING) {
+      setTicketBalance(currentBalance);
       Alert.alert(
-        '일일 무료 횟수 소진',
-        `하루 최대 ${MAX_DAILY_FITTING}회 무료 피팅을 모두 사용하셨습니다.\n광고를 보고 1회 충전하시겠습니까?`,
+        '🎟️ 스타일 티켓 부족',
+        `AI 가상 피팅 1회에 티켓 ${TICKET_COST_FITTING}장이 필요합니다.\n(현재 보유: ${currentBalance}장)\n\n짧은 광고를 보고 티켓 +${TICKET_REWARD_AD}장을 충전하시겠습니까?`,
         [
           { text: '취소', style: 'cancel' },
           {
-            text: '광고 보고 충전 🎥',
-            onPress: () => showRewardAd(),
-            style: 'default'
-          }
-        ]
+            text: `광고 보고 +${TICKET_REWARD_AD}장 충전 🎥`,
+            onPress: () => showRewardAd('RECHARGE'),
+            style: 'default',
+          },
+        ],
       );
       return;
     }
-    setRemainingCount(currentRemaining);
+    setTicketBalance(currentBalance);
 
     // 피팅 시작 시 내 옷장 패널 접기
     setIsPanelExpanded(false);
@@ -523,6 +703,13 @@ const VirtualFittingScreen = () => {
     // 옷 개수 정보도 함께 전송
     formData.append('clothing_count', selectedClothingImages.length.toString());
 
+    // MY 사이즈가 있으면 피팅 합성 프롬프트에 반영
+    if (bodyProfile) {
+      formData.append('heightCm', String(bodyProfile.heightCm));
+      formData.append('weightKg', String(bodyProfile.weightKg));
+      formData.append('usualSize', bodyProfile.usualSize);
+    }
+
     try {
       const response = await fetch(
         'https://codipop-backend.onrender.com/try-on',
@@ -535,40 +722,56 @@ const VirtualFittingScreen = () => {
       );
       const result = await response.json();
       if (result.success && result.imageUrl) {
-        // 이미지 합성 성공 시 일일 사용 횟수 증가
+        // 이미지 합성 성공 시 티켓 소모 및 레거시 횟수 업데이트
+        const deductRes = await deductTickets(TICKET_COST_FITTING, 'AI_FITTING');
+        setTicketBalance(deductRes.balance);
         await incrementDailyUsage();
-        // 남은 횟수 업데이트
         const { remainingCount: newRemaining } = await checkDailyUsage();
         setRemainingCount(newRemaining);
 
         setResultImage(result.imageUrl);
-        Toast.show({ type: 'success', text1: t('fittingComplete') });
+        Toast.show({ type: 'success', text1: t('fittingComplete'), text2: `티켓 -${TICKET_COST_FITTING}장 소모 (잔액: ${deductRes.balance}장)` });
         if (user) {
-          // 기존 recentResults에도 저장 (호환성 유지)
-          firestore()
-            .collection('users')
-            .doc(user.uid)
-            .collection('recentResults')
-            .add({
-              imageUrl: result.imageUrl,
-              createdAt: firestore.FieldValue.serverTimestamp(),
+          try {
+            const clothingItems = buildClothingItemsFromSelection(
+              selectedClothingImages,
+              closetItems,
+            );
+            await saveCodiResult({
+              userId: user.uid,
+              resultImageUrl: result.imageUrl,
+              clothingImageUrls: selectedClothingImages,
+              clothingItems,
             });
-
-          // 새로운 Recent Codi 컬렉션에도 저장
-          firestore()
-            .collection('users')
-            .doc(user.uid)
-            .collection('recentCodi')
-            .add({
-              imageUrl: result.imageUrl,
-              createdAt: firestore.FieldValue.serverTimestamp(),
-              isLiked: false,
-            });
+          } catch (saveError) {
+            console.error('코디 결과 저장 실패:', saveError);
+            // 한 번 더 재시도
+            try {
+              const clothingItems = buildClothingItemsFromSelection(
+                selectedClothingImages,
+                closetItems,
+              );
+              await saveCodiResult({
+                userId: user.uid,
+                resultImageUrl: result.imageUrl,
+                clothingImageUrls: selectedClothingImages,
+                clothingItems,
+              });
+            } catch (retryError) {
+              console.error('코디 결과 저장 재시도 실패:', retryError);
+              Toast.show({
+                type: 'error',
+                text1: t('saveFailed'),
+                text2: '피팅은 완료됐지만 코디북 저장에 실패했어요. 다시 피팅해 주세요.',
+              });
+            }
+          }
         }
       } else {
-        throw new Error(result.message);
+        throw new Error(result.message || 'fitting failed');
       }
     } catch (error) {
+      console.error('피팅 실패:', error);
       Toast.show({
         type: 'error',
         text1: t('error'),
@@ -623,26 +826,18 @@ const VirtualFittingScreen = () => {
     }
   };
 
-  // 결과 이미지를 다운로드/공유하는 함수
-  const handleDownloadImage = async () => {
+  // 결과 이미지를 실제 저장/공유하는 내부 처리 함수 (일반 워터마크 vs HD 옵션)
+  const processDownloadImage = async (isWatermarked: boolean) => {
     if (!resultImage) {
-      return;
-    }
-
-    const hasPermission = await checkAndRequestPermission();
-    if (!hasPermission) {
       return;
     }
 
     let localFile: string | null = null;
     try {
-      // ✅ [수정] 원본 이미지 비율 유지를 위해 캡처 대신 원본 다운로드 사용
-      const useCapture = false; // Platform.OS === 'android' && resultImageRef.current;
-
-      if (useCapture) {
+      if (isWatermarked) {
         try {
           setIsCapturing(true);
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 300));
 
           if (!resultImageRef.current) {
             throw new Error('이미지 참조가 유효하지 않습니다.');
@@ -655,7 +850,11 @@ const VirtualFittingScreen = () => {
 
           setIsCapturing(false);
           await CameraRoll.save(uri, { type: 'photo' });
-          Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
+          Toast.show({
+            type: 'success',
+            text1: '🎁 바이럴 워터마크(QR+초대코드) 포함 저장 완료 📸',
+            text2: 'SNS 공유하고 친구 초대하여 무료 티켓 20장 받아보세요! ✨',
+          });
           return;
         } catch (captureError) {
           console.error('이미지 캡처 실패:', captureError);
@@ -671,11 +870,17 @@ const VirtualFittingScreen = () => {
         await Share.share({
           url: `file://${localFile}`,
         });
-        Toast.show({ type: 'success', text1: t('imageShared') });
+        Toast.show({
+          type: 'success',
+          text1: isWatermarked ? t('imageShared') : '✨ HD 고화질 원본이 저장/공유되었습니다!',
+        });
       } else {
-        // Android에서는 기본 Share로 이미지 공유가 제한적일 수 있으므로 갤러리 저장만 우선 수행
+        // Android에서는 갤러리 저장 수행
         await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
-        Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
+        Toast.show({
+          type: 'success',
+          text1: isWatermarked ? t('imageSavedToGallery') : '✨ HD 고화질 원본이 갤러리에 저장되었습니다!',
+        });
       }
     } catch (error: any) {
       console.error('저장 실패:', error);
@@ -708,6 +913,57 @@ const VirtualFittingScreen = () => {
         }
       }
     }
+  };
+
+  // 결과 이미지 다운로드/공유 버튼 클릭 시 호출되는 함수 (ActionSheet로 화질 선택)
+  const handleDownloadImage = async () => {
+    if (!resultImage) {
+      return;
+    }
+
+    const hasPermission = await checkAndRequestPermission();
+    if (!hasPermission) {
+      return;
+    }
+
+    const options = [
+      '✨ 워터마크 없는 HD 고화질 원본 저장 (광고 1회 시청)',
+      '🎁 바이럴 워터마크(QR+초대코드) 포함 저장 (SNS 공유 시 +20장 보너스!)',
+      t('cancel'),
+    ];
+    const cancelButtonIndex = 2;
+
+    showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+        title: '이미지 저장 옵션 선택',
+        message: '고해상도 HD 원본으로 저장하시려면 짧은 광고를 시청해 주세요.',
+      },
+      async (selectedIndex?: number) => {
+        if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) {
+          return;
+        }
+
+        if (selectedIndex === 0) {
+          // ✨ HD 고화질 원본 저장 (광고 시청 후 저장)
+          Alert.alert(
+            'HD 고화질 다운로드 ✨',
+            '짧은 보상형 광고를 시청하시면 워터마크 없는 고해상도(HD) 원본 이미지가 갤러리에 저장됩니다.',
+            [
+              { text: '취소', style: 'cancel' },
+              {
+                text: '광고 보고 HD 저장 🎥',
+                onPress: () => showRewardAd('HD_DOWNLOAD'),
+              },
+            ],
+          );
+        } else if (selectedIndex === 1) {
+          // 🖼️ 일반 화질 (워터마크 포함) 저장
+          await processDownloadImage(true);
+        }
+      },
+    );
   };
 
   // 옷을 '선택/해제'하는 함수 (다중 선택 지원, 최대 3개 제한)
@@ -802,18 +1058,44 @@ const VirtualFittingScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      {/* 스타일 티켓 및 보상형 광고 충전 배지 (2단계 수익화/마케팅 적용) */}
+      <View style={styles.fittingStatusContainer}>
+        <View style={styles.fittingCountBadge}>
+          {isDevBypassUser() || ticketBalance >= 9999 ? (
+            <Text style={styles.fittingCountText}>
+              🎟️ DEV 무한 피팅{' '}
+              <Text style={[styles.fittingCountNumber, { color: '#6A0DAD' }]}>
+                ⚡ 999+장
+              </Text>
+            </Text>
+          ) : (
+            <Text style={styles.fittingCountText}>
+              🎟️ 보유 티켓:{' '}
+              <Text
+                style={[
+                  styles.fittingCountNumber,
+                  ticketBalance < TICKET_COST_FITTING && styles.fittingCountNumberLow,
+                ]}>
+                {ticketBalance}장
+              </Text>
+              <Text style={{ fontSize: 11, color: '#6A0DAD', fontWeight: '500' }}> (1회 -{TICKET_COST_FITTING}장)</Text>
+            </Text>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.adRechargeButton}
+          onPress={() => showRewardAd('RECHARGE')}
+          activeOpacity={0.8}>
+          <Text style={styles.adRechargeButtonText}>🎥 +{TICKET_REWARD_AD}장 충전</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* 메인 이미지 영역 - 화면 전체를 차지 */}
       <View style={styles.mainImageContainer}>
         {isProcessing ? (
           <View style={styles.processingContainer}>
-            <LottieView
-              source={require('../assets/animations/Bubbles.json')}
-              autoPlay
-              loop
-              style={{ width: 300, height: 300 }}
-            />
-            <Text style={styles.processingText}>최신 AI 기술로 코디 진행 중...</Text>
+            <CodiPopLoadingAnimation />
           </View>
         ) : resultImage ? (
           <View style={styles.resultContainer}>
@@ -823,16 +1105,8 @@ const VirtualFittingScreen = () => {
                 style={[styles.mainImage, { opacity: fadeAnim }]}
                 resizeMode="contain"
               />
-              {/* 워터마크 이미지 - 캡처할 때만 표시됨 */}
-              {isCapturing && (
-                <View style={styles.watermarkContainer} pointerEvents="none">
-                  <Image
-                    source={require('../assets/images/watermark.png')}
-                    style={styles.watermarkImage}
-                    resizeMode="contain"
-                  />
-                </View>
-              )}
+              {/* CodiPop 바이럴 워터마크 배너 (QR코드 + 초대코드 합성) - 상시 마운트로 로고 캐시 유지 */}
+              <CodiPopViralWatermark referralCode={userReferralCode} isVisible={isCapturing} />
             </View>
           </View>
         ) : personImage ? (
@@ -902,14 +1176,9 @@ const VirtualFittingScreen = () => {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.tryOnButton}>
-              <View style={styles.tryOnButtonContent}>
-                <Text style={styles.tryOnButtonText}>
+              <Text style={styles.tryOnButtonText}>
                   피팅 시작 ({selectedClothingImages.length}개 선택)
                 </Text>
-                <Text style={styles.remainingCountText}>
-                  남은 횟수: {remainingCount}회 (매일 {MAX_DAILY_FITTING}회 무료)
-                </Text>
-              </View>
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -963,7 +1232,7 @@ const VirtualFittingScreen = () => {
 
         {/* 옷 아이템 리스트 - 조건부 렌더링 */}
         {isPanelExpanded && (
-          <>
+          <View style={styles.clothingListFlex}>
             {loadingCloset ? (
               <ActivityIndicator style={{ marginTop: 20 }} />
             ) : (
@@ -973,10 +1242,11 @@ const VirtualFittingScreen = () => {
                 scrollEnabled={true}
                 showsVerticalScrollIndicator={false}
                 nestedScrollEnabled={true}
+                style={styles.clothingListFlex}
                 keyExtractor={(item, index) => item.isAddButton ? 'add-button' : item.id}
                 contentContainerStyle={[
                   styles.clothingGridContainer,
-                  { flexGrow: 0, paddingTop: 5, paddingBottom: 5 }, // 필요한 만큼만 공간 차지
+                  { paddingTop: 5, paddingBottom: 12 },
                 ]}
                 renderItem={({ item, index }) => {
                   // 첫 번째 아이템 (추가 버튼)
@@ -1049,7 +1319,7 @@ const VirtualFittingScreen = () => {
                 }}
               />
             )}
-          </>
+          </View>
         )}
       </RNAnimated.View>
 
@@ -1131,6 +1401,52 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  fittingStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    zIndex: 5,
+  },
+  fittingCountBadge: {
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D8B4FE',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fittingCountText: {
+    fontSize: 13,
+    color: '#4A1A7A',
+    fontWeight: '600',
+  },
+  fittingCountNumber: {
+    fontWeight: '800',
+    color: '#6A0DAD',
+  },
+  fittingCountNumberLow: {
+    color: '#E53E3E',
+  },
+  adRechargeButton: {
+    backgroundColor: '#6A0DAD',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    shadowColor: '#6A0DAD',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  adRechargeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   // 메인 이미지 영역 - 화면 전체를 차지
   mainImageContainer: {
     flex: 1,
@@ -1189,7 +1505,7 @@ const styles = StyleSheet.create({
   },
   changePersonButton: {
     position: 'absolute',
-    top: 50,
+    top: 10,
     left: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     paddingHorizontal: 18,
@@ -1212,10 +1528,8 @@ const styles = StyleSheet.create({
   },
   tryOnButtonContainer: {
     position: 'absolute',
-    top: 50,
+    top: 10,
     right: 20,
-    minWidth: 220,
-    maxWidth: 280,
     alignItems: 'flex-end',
     justifyContent: 'center',
     borderRadius: 20,
@@ -1224,8 +1538,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 58,
-    width: '100%',
+    paddingHorizontal: 18,
+    paddingVertical: 13,
     shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -1267,7 +1581,7 @@ const styles = StyleSheet.create({
   },
   downloadButtonWrapper: {
     position: 'absolute',
-    top: 50,
+    top: 10,
     right: 20,
     borderRadius: 20,
     shadowColor: '#8B5CF6',
@@ -1343,6 +1657,10 @@ const styles = StyleSheet.create({
     color: '#000000',
     borderBottomWidth: 2,
     borderBottomColor: '#000000',
+  },
+  clothingListFlex: {
+    flex: 1,
+    minHeight: 0,
   },
   clothingListContainer: {
     paddingTop: 5, // 상단 여백만 유지

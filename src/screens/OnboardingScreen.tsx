@@ -10,16 +10,19 @@ import {
   Dimensions,
   Image,
   StatusBar,
-  SafeAreaView,
+  LayoutChangeEvent,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useTranslation} from 'react-i18next';
 import {RootStackParamList} from '../../App';
 
-const {width: screenWidth} = Dimensions.get('window');
+const {width: WINDOW_WIDTH} = Dimensions.get('window');
 
 type OnboardingScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -48,6 +51,18 @@ const onboardingData: OnboardingData[] = [
   },
   {
     id: 3,
+    titleKey: 'onboardingMallTitle',
+    descriptionKey: 'onboardingMallDescription',
+    image: require('../assets/images/onboarding/screen4_mall_v2.png'),
+  },
+  {
+    id: 4,
+    titleKey: 'onboardingCommunityTitle',
+    descriptionKey: 'onboardingCommunityDescription',
+    image: require('../assets/images/onboarding/screen5_community_v2.png'),
+  },
+  {
+    id: 5,
     titleKey: 'onboarding3Title',
     descriptionKey: 'onboarding3Description',
     image: require('../assets/images/onboarding/screen3.png'),
@@ -58,8 +73,12 @@ const OnboardingScreen = () => {
   const navigation = useNavigation<OnboardingScreenNavigationProp>();
   const {t} = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [pageWidth, setPageWidth] = useState(WINDOW_WIDTH);
+  const [imageAreaHeight, setImageAreaHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const insets = useSafeAreaInsets();
+
+  const current = onboardingData[currentIndex];
 
   const handleOnboardingDone = async () => {
     try {
@@ -84,72 +103,92 @@ const OnboardingScreen = () => {
     handleOnboardingDone();
   };
 
-  const renderOnboardingItem = ({item}: {item: OnboardingData}) => (
-    <View style={styles.slide}>
-      <View style={styles.imageContainer}>
-        <Image
-          source={item.image}
-          style={styles.onboardingImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={styles.textContainer}>
-        <Text style={styles.title}>{t(item.titleKey)}</Text>
-        <Text style={styles.description}>{t(item.descriptionKey)}</Text>
-      </View>
-    </View>
-  );
+  const onListLayout = (event: LayoutChangeEvent) => {
+    const {width, height} = event.nativeEvent.layout;
+    if (width > 0 && Math.abs(width - pageWidth) > 1) {
+      setPageWidth(width);
+    }
+    if (height > 0 && Math.abs(height - imageAreaHeight) > 1) {
+      setImageAreaHeight(height);
+    }
+  };
 
-  const renderPagination = () => (
-    <View style={styles.pagination}>
-      {onboardingData.map((_, index) => (
-        <View
-          key={index}
-          style={[
-            styles.paginationDot,
-            index === currentIndex && styles.paginationDotActive,
-          ]}
-        />
-      ))}
+  const renderOnboardingItem = ({item}: {item: OnboardingData}) => (
+    <View
+      style={[
+        styles.slide,
+        {width: pageWidth, height: imageAreaHeight || undefined},
+      ]}>
+      <Image
+        source={item.image}
+        style={styles.onboardingImage}
+        resizeMode="contain"
+      />
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" />
 
-      {/* ✅ 1. 메인 콘텐츠 영역 (FlatList와 Pagination) */}
-      <View style={styles.mainContent}>
-        <FlatList
-          ref={flatListRef}
-          data={onboardingData}
-          renderItem={renderOnboardingItem}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={event => {
-            const index = Math.round(
-              event.nativeEvent.contentOffset.x / screenWidth,
-            );
-            setCurrentIndex(index);
-          }}
-          keyExtractor={item => item.id.toString()}
-        />
-        {renderPagination()}
+      {/* 이미지만 스크롤 영역 */}
+      <View style={styles.imageArea} onLayout={onListLayout}>
+        {imageAreaHeight > 0 && (
+          <FlatList
+            ref={flatListRef}
+            data={onboardingData}
+            renderItem={renderOnboardingItem}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            bounces={false}
+            keyExtractor={item => item.id.toString()}
+            getItemLayout={(_, index) => ({
+              length: pageWidth,
+              offset: pageWidth * index,
+              index,
+            })}
+            onMomentumScrollEnd={event => {
+              const index = Math.round(
+                event.nativeEvent.contentOffset.x / pageWidth,
+              );
+              setCurrentIndex(index);
+            }}
+          />
+        )}
       </View>
 
-      {/* ✅ 2. 하단 버튼 영역 */}
-      <View style={[styles.buttonContainer, {paddingBottom: insets.bottom + 16}]}>
-        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-          <Text style={styles.skipButtonText}>{t('skip')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextButtonText}>
-            {currentIndex === onboardingData.length - 1
-              ? t('getStarted')
-              : t('continueButton')}
-          </Text>
-        </TouchableOpacity>
+      {/* 텍스트·페이지네이션·버튼은 항상 보이는 하단 고정 */}
+      <View style={[styles.bottomArea, {paddingBottom: insets.bottom + 12}]}>
+        <View style={styles.textContainer}>
+          <Text style={styles.title}>{t(current.titleKey)}</Text>
+          <Text style={styles.description}>{t(current.descriptionKey)}</Text>
+        </View>
+
+        <View style={styles.pagination}>
+          {onboardingData.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.paginationDot,
+                index === currentIndex && styles.paginationDotActive,
+              ]}
+            />
+          ))}
+        </View>
+
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+            <Text style={styles.skipButtonText}>{t('skip')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+            <Text style={styles.nextButtonText}>
+              {currentIndex === onboardingData.length - 1
+                ? t('getStarted')
+                : t('continueButton')}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -160,56 +199,51 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
-  // ✅ 1. 메인 콘텐츠 영역 스타일 추가
-  mainContent: {
-    flex: 1, // 버튼 영역을 제외한 모든 공간을 차지
-    justifyContent: 'center', // ✅ 세로 중앙 정렬 추가
+  imageArea: {
+    flex: 1,
+    minHeight: 0,
   },
   slide: {
-    width: screenWidth,
-    flex: 1, // FlatList 안에서 꽉 차도록
     alignItems: 'center',
-    justifyContent: 'flex-start', // 상단부터 배치
-  },
-  imageContainer: {
-    flex: 0.85, // 이미지 영역을 더 크게 (70% → 85%)
-    justifyContent: 'center', // 이미지를 중앙에 배치
-    paddingBottom: 3, // 하단 여백 3
-    marginTop: 38, // 상단 여백 (35 → 38)
-    width: '100%',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   onboardingImage: {
-    width: screenWidth * 0.98, // 이미지 크기 증가 (95% → 98%)
+    width: '100%',
     height: '100%',
   },
+  bottomArea: {
+    backgroundColor: '#F5F5F5',
+    paddingTop: 4,
+  },
   textContainer: {
-    flex: 0.15, // 텍스트 영역 줄이기 (30% → 15%)
     alignItems: 'center',
-    paddingHorizontal: 30,
-    justifyContent: 'center', // 중앙 정렬
-    paddingTop: 8, // 상단 패딩 최소화
-    paddingBottom: 8, // 하단 패딩 최소화
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    minHeight: 84,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
     color: '#333333',
     textAlign: 'center',
-    marginBottom: 8, // 공백 줄이기 (16 → 8)
-    lineHeight: 36,
+    marginBottom: 6,
+    lineHeight: 30,
   },
   description: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666666',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
     fontWeight: '400',
   },
   pagination: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 10, // 공백 줄이기 (20 → 10)
+    paddingVertical: 14,
   },
   paginationDot: {
     width: 8,
@@ -222,13 +256,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#6A0DAD',
     width: 28,
   },
-  // ✅ 2. 버튼 영역 스타일 (position: 'absolute' 제거)
   buttonContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingTop: 10, // 공백 줄이기 (20 → 10)
-    paddingBottom: 40, // 하단 여백
-    backgroundColor: '#F5F5F5',
   },
   skipButton: {
     flex: 1,

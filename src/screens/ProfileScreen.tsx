@@ -1,26 +1,84 @@
 // src/screens/ProfileScreen.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
+  ScrollView,
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import { useTranslation } from 'react-i18next';
+import type { RootStackParamList } from '../navigation/types';
+import {
+  getUserReferralCode,
+  checkHasClaimedReferral,
+  claimReferralCode,
+  TICKET_REWARD_REFERRAL,
+} from '../services/ticketService';
 
 const ProfileScreen = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = auth().currentUser;
   const insets = useSafeAreaInsets();
   const [isDeleting, setIsDeleting] = useState(false);
   const { t, i18n } = useTranslation();
+
+  const [referralCode, setReferralCode] = useState<string>('');
+  const [hasClaimed, setHasClaimed] = useState<boolean>(false);
+  const [inputReferral, setInputReferral] = useState<string>('');
+  const [isSubmittingCode, setIsSubmittingCode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (user) {
+      getUserReferralCode().then(code => setReferralCode(code));
+      checkHasClaimedReferral().then(claimed => setHasClaimed(claimed));
+    }
+  }, [user]);
+
+  const handleShareReferral = async () => {
+    if (!referralCode) return;
+    try {
+      await Share.share({
+        message: `[CodiPop AI 가상 피팅 초대]\n가입 시 초대 코드 [ ${referralCode} ] 를 입력하고 무료 피팅 티켓 +${TICKET_REWARD_REFERRAL}장(2회권)을 받아보세요! ✨`,
+      });
+    } catch (error) {
+      console.error('공유하기 실패:', error);
+    }
+  };
+
+  const handleClaimSubmit = async () => {
+    if (!inputReferral || inputReferral.trim().length < 5) {
+      Alert.alert('알림', '6자리 초대 코드를 정확히 입력해 주세요.');
+      return;
+    }
+    setIsSubmittingCode(true);
+    try {
+      const res = await claimReferralCode(inputReferral);
+      if (res.success) {
+        setHasClaimed(true);
+        setInputReferral('');
+        Alert.alert('축하합니다! 🎉', res.message);
+      } else {
+        Alert.alert('안내', res.message);
+      }
+    } catch (error) {
+      Alert.alert('오류', '초대 코드 등록 중 문제가 발생했습니다.');
+    } finally {
+      setIsSubmittingCode(false);
+    }
+  };
 
   const changeLanguage = (lang: string) => {
     i18n.changeLanguage(lang);
@@ -113,6 +171,15 @@ const ProfileScreen = () => {
       const recentCodiDeletePromises = recentCodiSnapshot.docs.map(doc => doc.ref.delete());
       await Promise.all(recentCodiDeletePromises);
 
+      const wishlistSnapshot = await firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('wishlist')
+        .get();
+
+      const wishlistDeletePromises = wishlistSnapshot.docs.map(doc => doc.ref.delete());
+      await Promise.all(wishlistDeletePromises);
+
       // 2. Firebase Storage에서 사용자 폴더 삭제
       try {
         const storageRef = storage().ref(`users/${userId}`);
@@ -159,72 +226,150 @@ const ProfileScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.headerTitle}>프로필</Text>
-
-      <View style={styles.profileInfoContainer}>
-        <Text style={styles.infoLabel}>로그인된 계정</Text>
-        <Text style={styles.emailText}>
-          {user ? user.email : '사용자 정보 없음'}
-        </Text>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.headerRow}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}>
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>프로필</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      <View style={styles.profileInfoContainer}>
-        <Text style={styles.infoLabel}>{t('languageSettings')}</Text>
-        <View style={styles.languageButtonContainer}>
-          <TouchableOpacity
-            style={[
-              styles.languageButton,
-              i18n.language === 'ko' && styles.activeLanguageButton,
-            ]}
-            onPress={() => changeLanguage('ko')}>
-            <Text
-              style={[
-                styles.languageButtonText,
-                i18n.language === 'ko' && styles.activeLanguageButtonText,
-              ]}>
-              {t('korean')}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
+        <View style={styles.profileInfoContainer}>
+          <Text style={styles.infoLabel}>로그인된 계정</Text>
+          <Text style={styles.emailText}>
+            {user ? user.email : '사용자 정보 없음'}
+          </Text>
+        </View>
+
+        {/* ⚡ 친구 초대 및 보너스 티켓 섹션 (전략 D) */}
+        <View style={styles.referralContainer}>
+          <View style={styles.referralHeader}>
+            <Text style={styles.referralTitle}>⚡ 친구 초대하고 티켓 20장 받기</Text>
+            <Text style={styles.referralDesc}>
+              친구와 내가 모두 피팅 2회권(+20장)을 받아요!
             </Text>
-          </TouchableOpacity>
+          </View>
+
+          <View style={styles.myCodeBox}>
+            <Text style={styles.myCodeLabel}>내 초대 코드</Text>
+            <View style={styles.myCodeRow}>
+              <Text style={styles.myCodeText}>{referralCode || '로딩 중...'}</Text>
+              <TouchableOpacity
+                style={styles.shareCodeButton}
+                onPress={handleShareReferral}
+                disabled={!referralCode}>
+                <Text style={styles.shareCodeButtonText}>공유하기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {!hasClaimed ? (
+            <View style={styles.claimBox}>
+              <Text style={styles.claimLabel}>친구의 초대 코드 등록</Text>
+              <View style={styles.claimInputRow}>
+                <TextInput
+                  style={styles.claimInput}
+                  placeholder="6자리 코드 입력"
+                  placeholderTextColor="#999"
+                  autoCapitalize="characters"
+                  maxLength={10}
+                  value={inputReferral}
+                  onChangeText={setInputReferral}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.claimButton,
+                    isSubmittingCode && styles.claimButtonDisabled,
+                  ]}
+                  onPress={handleClaimSubmit}
+                  disabled={isSubmittingCode}>
+                  {isSubmittingCode ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.claimButtonText}>등록</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.claimedSuccessBox}>
+              <Text style={styles.claimedSuccessText}>
+                ✅ 친구 초대 코드가 등록되어 +20장 보상이 지급되었습니다.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.profileInfoContainer}>
+          <Text style={styles.infoLabel}>{t('sizeProfileSection')}</Text>
           <TouchableOpacity
-            style={[
-              styles.languageButton,
-              i18n.language === 'en' && styles.activeLanguageButton,
-            ]}
-            onPress={() => changeLanguage('en')}>
-            <Text
-              style={[
-                styles.languageButtonText,
-                i18n.language === 'en' && styles.activeLanguageButtonText,
-              ]}>
-              {t('english')}
-            </Text>
+            style={styles.bodySizeButton}
+            onPress={() => navigation.navigate('BodySize')}>
+            <Text style={styles.bodySizeButtonText}>{t('sizeProfileCta')}</Text>
           </TouchableOpacity>
         </View>
-      </View>
 
-      {isDeleting ? (
-        <View style={[styles.loadingContainer, { marginBottom: insets.bottom + 20 }]}>
-          <ActivityIndicator size="large" color="#FF6B9D" />
-          <Text style={styles.loadingText}>계정 삭제 중...</Text>
+        <View style={styles.profileInfoContainer}>
+          <Text style={styles.infoLabel}>{t('languageSettings')}</Text>
+          <View style={styles.languageButtonContainer}>
+            <TouchableOpacity
+              style={[
+                styles.languageButton,
+                i18n.language === 'ko' && styles.activeLanguageButton,
+              ]}
+              onPress={() => changeLanguage('ko')}>
+              <Text
+                style={[
+                  styles.languageButtonText,
+                  i18n.language === 'ko' && styles.activeLanguageButtonText,
+                ]}>
+                {t('korean')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.languageButton,
+                i18n.language === 'en' && styles.activeLanguageButton,
+              ]}
+              onPress={() => changeLanguage('en')}>
+              <Text
+                style={[
+                  styles.languageButtonText,
+                  i18n.language === 'en' && styles.activeLanguageButtonText,
+                ]}>
+                {t('english')}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      ) : (
-        <>
-          <TouchableOpacity
-            style={[styles.logoutButton, { marginTop: 40 }]}
-            onPress={handleLogout}
-            disabled={isDeleting}>
-            <Text style={styles.logoutButtonText}>로그아웃</Text>
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.deleteAccountButton, { marginBottom: insets.bottom + 20 }]}
-            onPress={handleDeleteAccount}
-            disabled={isDeleting}>
-            <Text style={styles.deleteAccountButtonText}>회원 탈퇴</Text>
-          </TouchableOpacity>
-        </>
-      )}
+        {isDeleting ? (
+          <View style={[styles.loadingContainer, { marginBottom: insets.bottom + 20 }]}>
+            <ActivityIndicator size="large" color="#FF6B9D" />
+            <Text style={styles.loadingText}>계정 삭제 중...</Text>
+          </View>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[styles.logoutButton, { marginTop: 40 }]}
+              onPress={handleLogout}
+              disabled={isDeleting}>
+              <Text style={styles.logoutButtonText}>로그아웃</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.deleteAccountButton, { marginBottom: insets.bottom + 20 }]}
+              onPress={handleDeleteAccount}
+              disabled={isDeleting}>
+              <Text style={styles.deleteAccountButtonText}>회원 탈퇴</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -234,11 +379,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButtonText: {
+    fontSize: 22,
+    color: '#333333',
+  },
+  headerSpacer: {
+    width: 40,
+  },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
-    padding: 20,
+    color: '#222222',
   },
   profileInfoContainer: {
     paddingHorizontal: 20,
@@ -252,6 +418,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#000000',
     marginTop: 8,
+  },
+  bodySizeButton: {
+    marginTop: 10,
+    backgroundColor: '#F6EDFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0C8F0',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  bodySizeButtonText: {
+    color: '#6A0DAD',
+    fontSize: 14,
+    fontWeight: '700',
   },
   logoutButton: {
     marginHorizontal: 20,
@@ -316,6 +496,115 @@ const styles = StyleSheet.create({
   activeLanguageButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  referralContainer: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#FFF5F8',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FFE0EC',
+  },
+  referralHeader: {
+    marginBottom: 12,
+  },
+  referralTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FF4D8D',
+  },
+  referralDesc: {
+    fontSize: 13,
+    color: '#666666',
+    marginTop: 4,
+  },
+  myCodeBox: {
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    marginBottom: 12,
+  },
+  myCodeLabel: {
+    fontSize: 12,
+    color: '#888888',
+    marginBottom: 6,
+  },
+  myCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  myCodeText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#222222',
+    letterSpacing: 1.5,
+  },
+  shareCodeButton: {
+    backgroundColor: '#FF6B9D',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  shareCodeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  claimBox: {
+    borderTopWidth: 1,
+    borderTopColor: '#FFE0EC',
+    paddingTop: 12,
+  },
+  claimLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 8,
+  },
+  claimInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  claimInput: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#222',
+  },
+  claimButton: {
+    backgroundColor: '#333333',
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  claimButtonDisabled: {
+    opacity: 0.6,
+  },
+  claimButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  claimedSuccessBox: {
+    borderTopWidth: 1,
+    borderTopColor: '#FFE0EC',
+    paddingTop: 12,
+    alignItems: 'center',
+  },
+  claimedSuccessText: {
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: '600',
   },
 });
 

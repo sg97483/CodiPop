@@ -2,10 +2,10 @@
 
 buildscript {
     ext {
-        buildToolsVersion = "35.0.0"
+        buildToolsVersion = "36.0.0"
         minSdkVersion = 24
-        compileSdkVersion = 35
-        targetSdkVersion = 35
+        compileSdkVersion = 36
+        targetSdkVersion = 36
         ndkVersion = "27.0.12077973" // NDK r27 for 16KB page size support
         kotlinVersion = "1.9.25" // Downgraded for library compatibility
     }
@@ -27,6 +27,11 @@ buildscript {
 
 // parkingpark의 핵심 안정화 코드를 가져온 부분입니다.
 allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "$rootDir/../node_modules/@notifee/react-native/android/libs" }
+    }
     configurations.all {
         resolutionStrategy {
             // play-services-location 라이브러리의 버전을 21.0.1로 강제합니다.

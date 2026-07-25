@@ -27,7 +27,7 @@ setup_permissions([
 ])
 
 # react-native-screens gamma 프로젝트 활성화 (React Native 0.76에서 필요)
-ENV['RNS_GAMMA_ENABLED'] = '1'
+# ENV['RNS_GAMMA_ENABLED'] = '1' # New Architecture 비활성화 시 함께 비활성화
 
 target 'CodiPop' do
   config = use_native_modules!
@@ -40,7 +40,8 @@ target 'CodiPop' do
   use_react_native!(
     :path => config[:reactNativePath],
     :hermes_enabled => flags[:hermes_enabled],
-    :fabric_enabled => flags[:fabric_enabled],
+    :fabric_enabled => false,
+    :new_arch_enabled => false,
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
@@ -157,11 +158,8 @@ target 'CodiPop' do
           unless existing_flags.include?('-Wl,-u,_RNSSplitViewHostCls')
             config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSSplitViewHostCls'
           end
-          unless existing_flags.include?('-Wl,-u,_RNSSplitViewScreenCls')
-            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSSplitViewScreenCls'
-          end
-          unless existing_flags.include?('-Wl,-u,_RNSStackScreenCls')
-            config.build_settings['OTHER_LDFLAGS'] << '-Wl,-u,_RNSStackScreenCls'
+          unless existing_flags.to_s.include?('-force_load')
+            config.build_settings['OTHER_LDFLAGS'] << '-force_load' << '$(BUILT_PRODUCTS_DIR)/RNScreens/RNScreens.framework/RNScreens'
           end
         end
       end

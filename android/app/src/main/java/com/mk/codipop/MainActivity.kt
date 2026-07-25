@@ -1,5 +1,6 @@
 package com.mk.codipop
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.core.view.WindowCompat
 import com.facebook.react.ReactActivity
@@ -21,5 +22,10 @@ class MainActivity : ReactActivity() {
     WindowCompat.setDecorFitsSystemWindows(window, false)
     // 2. 스플래시 화면 초기화 (권장 순서: super 이후)
     RNBootSplash.init(this, R.style.BootTheme)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
   }
 }

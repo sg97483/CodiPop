@@ -1,26 +1,36 @@
 // src/screens/HomeScreen.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  SafeAreaView,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList, // ✅ FlatList로 변경
   ActivityIndicator,
+  Alert,
   Image,
+  SafeAreaView,
   ScrollView,
-  ImageBackground,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useNavigation, useIsFocused } from '@react-navigation/native'; // ✅ useIsFocused 추가
+import {
+  CompositeNavigationProp,
+  useIsFocused,
+  useNavigation,
+} from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // ✅ NativeStackNavigationProp import
-import { CompositeNavigationProp } from '@react-navigation/native'; // ✅ CompositeNavigationProp import
-import { MainTabParamList } from '../navigators/MainTabNavigator'; // ✅ MainTabParamList import
-import firestore from '@react-native-firebase/firestore'; // ✅ firestore import
-import auth from '@react-native-firebase/auth'; // ✅ auth import
-import { RootStackParamList } from 'App';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
+import { MainTabParamList } from '../navigators/MainTabNavigator';
+import { RootStackParamList } from '../navigation/types';
+import {
+  fetchCommunityFeed,
+  type CommunityPost,
+} from '../services/communityService';
+import { checkAndClaimDailyAttendance } from '../services/ticketService';
 
 type HomeScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -30,6 +40,8 @@ type HomeScreenNavigationProp = CompositeNavigationProp<
 interface RecentItem {
   id: string;
   imageUrl: string;
+  createdAt?: any;
+  isLiked?: boolean;
 }
 
 interface ClosetItem {
@@ -40,119 +52,160 @@ interface ClosetItem {
 
 const HomeScreen = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const isFocused = useIsFocused(); // ✅ 화면이 포커스될 때마다 감지
+  const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+  const user = auth().currentUser;
 
   const [loading, setLoading] = useState(true);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [closetItems, setClosetItems] = useState<ClosetItem[]>([]);
   const [closetLoading, setClosetLoading] = useState(true);
-  const user = auth().currentUser;
+  const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
+  const [communityLoading, setCommunityLoading] = useState(true);
 
-  // 사용자 이름 가져오기 함수
   const getUserDisplayName = () => {
-    if (!user) return 'CodiPOP';
-
-    // Google 로그인의 경우 displayName 또는 email에서 이름 추출
+    if (!user) {
+      return 'CodiPOP';
+    }
     if (user.displayName) {
       return user.displayName;
     }
-
-    // email에서 이름 추출 (예: john.doe@gmail.com -> John)
     if (user.email) {
       const emailName = user.email.split('@')[0];
       return emailName.charAt(0).toUpperCase() + emailName.slice(1);
     }
-
     return 'CodiPOP';
   };
 
-  // 사용자 프로필 이미지 가져오기
   const getUserProfileImage = () => {
-    if (!user) return null;
+    if (!user) {
+      return null;
+    }
     return user.photoURL;
   };
 
-  // 최근 피팅 결과 가져오기
   useEffect(() => {
-    if (isFocused && user) {
-      setLoading(true);
-      const subscriber = firestore()
-        .collection('users')
-        .doc(user.uid)
-        .collection('recentResults')
-        .orderBy('createdAt', 'desc') // 최신순으로 정렬
-        .limit(10) // 최근 10개만 가져오기
-        .onSnapshot(
-          querySnapshot => {
-            if (!querySnapshot) {
-              console.log('Recent results querySnapshot is null');
-              setLoading(false);
-              return;
-            }
-            const items: RecentItem[] = [];
-            querySnapshot.forEach(documentSnapshot => {
-              items.push({
-                id: documentSnapshot.id,
-                imageUrl: documentSnapshot.data().imageUrl,
-              });
-            });
-            setRecentItems(items);
-            setLoading(false);
-          },
-          error => {
-            console.error('Recent results snapshot error:', error);
-            setLoading(false);
-          },
-        );
-
-      // 화면을 벗어나면 구독 해제
-      return () => subscriber();
+    if (isFocused) {
+      checkAndClaimDailyAttendance().then(result => {
+        if (result.claimed) {
+          Alert.alert(
+            '🎁 오늘의 출석체크 보너스!',
+            `매일 첫 접속 보너스로 스타일 티켓 +${result.rewardAmount}장이 지급되었습니다!\n(현재 잔액: ${result.balance}장)`,
+            [{ text: '확인' }],
+          );
+        }
+      });
     }
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (!isFocused || !user) {
+      return;
+    }
+
+    setLoading(true);
+    const subscriber = firestore()
+      .collection('users')
+      .doc(user.uid)
+      .collection('recentResults')
+      .orderBy('createdAt', 'desc')
+      .limit(10)
+      .onSnapshot(
+        querySnapshot => {
+          if (!querySnapshot) {
+            setLoading(false);
+            return;
+          }
+          const items: RecentItem[] = [];
+          querySnapshot.forEach(documentSnapshot => {
+            const data = documentSnapshot.data();
+            items.push({
+              id: documentSnapshot.id,
+              imageUrl: data.imageUrl,
+              createdAt: data.createdAt,
+              isLiked: data.isLiked || false,
+            });
+          });
+          setRecentItems(items);
+          setLoading(false);
+        },
+        error => {
+          console.error('Recent results snapshot error:', error);
+          setLoading(false);
+        },
+      );
+
+    return () => subscriber();
   }, [isFocused, user]);
 
-  // 옷장 데이터 가져오기 (추천용)
   useEffect(() => {
-    if (isFocused && user) {
-      setClosetLoading(true);
-      const subscriber = firestore()
-        .collection('users')
-        .doc(user.uid)
-        .collection('closet')
-        .orderBy('createdAt', 'desc')
-        .onSnapshot(
-          querySnapshot => {
-            if (!querySnapshot) {
-              console.log('Closet querySnapshot is null');
-              setClosetLoading(false);
-              return;
-            }
-            const items: ClosetItem[] = [];
-            querySnapshot.forEach(documentSnapshot => {
-              const data = documentSnapshot.data();
-              items.push({
-                id: documentSnapshot.id,
-                imageUrl: data.imageUrl,
-                category: data.category,
-              });
-            });
-            setClosetItems(items);
-            setClosetLoading(false);
-          },
-          error => {
-            console.error('Closet snapshot error:', error);
-            setClosetLoading(false);
-          },
-        );
-
-      return () => subscriber();
+    if (!isFocused || !user) {
+      return;
     }
+
+    setClosetLoading(true);
+    const subscriber = firestore()
+      .collection('users')
+      .doc(user.uid)
+      .collection('closet')
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(
+        querySnapshot => {
+          if (!querySnapshot) {
+            setClosetLoading(false);
+            return;
+          }
+          const items: ClosetItem[] = [];
+          querySnapshot.forEach(documentSnapshot => {
+            const data = documentSnapshot.data();
+            items.push({
+              id: documentSnapshot.id,
+              imageUrl: data.imageUrl,
+              category: data.category,
+            });
+          });
+          setClosetItems(items);
+          setClosetLoading(false);
+        },
+        error => {
+          console.error('Closet snapshot error:', error);
+          setClosetLoading(false);
+        },
+      );
+
+    return () => subscriber();
   }, [isFocused, user]);
 
-  // 추천 로직
+  const loadCommunity = useCallback(async () => {
+    if (!user) {
+      setCommunityPosts([]);
+      setCommunityLoading(false);
+      return;
+    }
+    setCommunityLoading(true);
+    try {
+      const posts = await fetchCommunityFeed(6);
+      setCommunityPosts(posts.slice(0, 6));
+    } catch (error) {
+      console.error('Home community load failed', error);
+      setCommunityPosts([]);
+    } finally {
+      setCommunityLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (isFocused) {
+      loadCommunity();
+    }
+  }, [isFocused, loadCommunity]);
+
   const getRecommendations = () => {
-    if (closetItems.length === 0) return null;
+    if (closetItems.length === 0) {
+      return null;
+    }
 
-    // 카테고리별 아이템 수 계산
     const categoryCount: { [key: string]: number } = {};
     closetItems.forEach(item => {
       if (item.category) {
@@ -160,42 +213,69 @@ const HomeScreen = () => {
       }
     });
 
-    // 가장 많은 카테고리 찾기
-    const mostPopularCategory = Object.keys(categoryCount).reduce((a, b) =>
-      categoryCount[a] > categoryCount[b] ? a : b
-    );
+    const categories = Object.keys(categoryCount);
+    if (categories.length === 0) {
+      return {
+        category: t('homeClosetAll'),
+        items: closetItems.slice(0, 6),
+        totalItems: closetItems.length,
+      };
+    }
 
-    // 해당 카테고리의 최신 아이템들
-    const recommendedItems = closetItems
-      .filter(item => item.category === mostPopularCategory)
-      .slice(0, 3);
+    const mostPopularCategory = categories.reduce((a, b) =>
+      categoryCount[a] > categoryCount[b] ? a : b,
+    );
 
     return {
       category: mostPopularCategory,
-      items: recommendedItems,
+      items: closetItems
+        .filter(item => item.category === mostPopularCategory)
+        .slice(0, 6),
       totalItems: closetItems.length,
-      categoryCount
     };
   };
 
   const recommendations = getRecommendations();
 
+  const quickActions = [
+    {
+      key: 'fitting',
+      title: t('homeQuickFitting'),
+      subtitle: t('homeQuickFittingHint'),
+      icon: require('../assets/icons/icon-fitting-active.png'),
+      onPress: () => navigation.jumpTo('VirtualFitting'),
+    },
+    {
+      key: 'mall',
+      title: t('homeQuickMall'),
+      subtitle: t('homeQuickMallHint'),
+      icon: require('../assets/icons/search-dark.png'),
+      onPress: () => navigation.navigate('MallList'),
+    },
+    {
+      key: 'community',
+      title: t('homeQuickCommunity'),
+      subtitle: t('homeQuickCommunityHint'),
+      icon: require('../assets/icons/icon-community-active.png'),
+      onPress: () => navigation.navigate('CommunityCreatePost'),
+    },
+  ];
+
   return (
-    <SafeAreaView style={styles.container}>
-      {/* --- 헤더 섹션 --- */}
-      <ScrollView>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 28 }}>
         <View style={styles.headerContainer}>
-          <View>
+          <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={styles.welcomeMessage}>
-              안녕하세요, {getUserDisplayName()}님!
+              {t('homeGreeting', { name: getUserDisplayName() })}
             </Text>
-            <Text style={styles.welcomeSubMessage}>
-              오늘 입어볼 옷을 찾아볼까요?
-            </Text>
+            <Text style={styles.welcomeSubMessage}>{t('homeSubtitle')}</Text>
           </View>
           <TouchableOpacity
             style={styles.profileIcon}
-            onPress={() => navigation.jumpTo('Profile')}>
+            onPress={() => navigation.navigate('Profile')}>
             {getUserProfileImage() ? (
               <Image
                 source={{ uri: getUserProfileImage() || '' }}
@@ -211,104 +291,214 @@ const HomeScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* --- 메인 기능 안내 카드 --- */}
-        <TouchableOpacity
-          style={styles.mainCtaCard}
-          onPress={() => navigation.jumpTo('VirtualFitting')}
-          activeOpacity={0.9}>
-          <ImageBackground
-            source={require('../assets/images/home_fitting_human2.png')}
-            style={styles.ctaGradient}
-            imageStyle={styles.backgroundImage}
-            resizeMode="cover">
-            <View style={styles.overlay} />
-            <View style={styles.ctaTitleContainer}>
-              <Text style={styles.ctaTitle}>Fitting Room</Text>
-            </View>
-            <View style={styles.ctaContentColumn}>
-              <View style={styles.ctaContentRow}>
-                <Text style={styles.ctaSubtitle}>
-                  나만의 코디를 완성해 보세요.
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>{t('homeQuickTitle')}</Text>
+          <View style={styles.quickGrid}>
+            <TouchableOpacity
+              style={styles.quickCardPrimaryWrap}
+              activeOpacity={0.85}
+              onPress={quickActions[0].onPress}>
+              <LinearGradient
+                colors={['#FBF7FF', '#F0E6FA', '#E8D9F7']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.quickCardPrimary}>
+                <Image
+                  source={quickActions[0].icon}
+                  style={styles.quickIconPrimary}
+                />
+                <Text style={styles.quickTitlePrimary}>
+                  {quickActions[0].title}
                 </Text>
-                <TouchableOpacity
-                  style={styles.ctaButton}
-                  onPress={() => navigation.jumpTo('VirtualFitting')}>
-                  <Text style={styles.ctaButtonText}>시작하기</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ImageBackground>
-        </TouchableOpacity>
+                <Text style={styles.quickSubtitlePrimary}>
+                  {quickActions[0].subtitle}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
 
-        {/* --- 최근에 입어본 옷 섹션 --- */}
+            <View style={styles.quickSideColumn}>
+              <TouchableOpacity
+                style={styles.quickCardSide}
+                activeOpacity={0.85}
+                onPress={quickActions[1].onPress}>
+                <Image
+                  source={quickActions[1].icon}
+                  style={styles.quickIcon}
+                />
+                <Text style={styles.quickTitle}>{quickActions[1].title}</Text>
+                <Text style={styles.quickSubtitle}>{quickActions[1].subtitle}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickCardSide}
+                activeOpacity={0.85}
+                onPress={quickActions[2].onPress}>
+                <Image
+                  source={quickActions[2].icon}
+                  style={styles.quickIcon}
+                />
+                <Text style={styles.quickTitle}>{quickActions[2].title}</Text>
+                <Text style={styles.quickSubtitle}>{quickActions[2].subtitle}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>최근에 입어본 옷</Text>
+            <Text style={styles.sectionTitle}>{t('homeContinueTitle')}</Text>
+            <TouchableOpacity onPress={() => navigation.jumpTo('RecentCodi')}>
+              <Text style={styles.seeAllText}>{t('homeSeeAll')}</Text>
+            </TouchableOpacity>
           </View>
 
           {loading ? (
-            <ActivityIndicator style={{ marginTop: 20 }} size="large" />
+            <ActivityIndicator style={{ marginTop: 16 }} color="#6A0DAD" />
           ) : recentItems.length > 0 ? (
-            <FlatList
-              data={recentItems}
+            <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
+              contentContainerStyle={{ paddingRight: 20 }}>
+              {recentItems.map(item => (
                 <TouchableOpacity
+                  key={item.id}
                   onPress={() =>
-                    navigation.navigate('Detail', { imageUrl: item.imageUrl })
+                    navigation.navigate('CodiDetail', {
+                      codiId: item.id,
+                      imageUrl: item.imageUrl,
+                      createdAt: item.createdAt,
+                      isLiked: item.isLiked,
+                    })
                   }>
                   <Image
                     source={{ uri: item.imageUrl }}
                     style={styles.feedCard}
+                    resizeMode="cover"
                   />
                 </TouchableOpacity>
-              )}
-              contentContainerStyle={{ paddingRight: 20 }}
-            />
+              ))}
+            </ScrollView>
           ) : (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>아직 입어본 옷이 없어요.</Text>
+              <Text style={styles.emptyText}>{t('homeContinueEmpty')}</Text>
+              <TouchableOpacity
+                style={styles.emptyAction}
+                onPress={() => navigation.jumpTo('VirtualFitting')}>
+                <Text style={styles.emptyActionText}>
+                  {t('homeQuickFitting')}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
 
-        {/* --- 가장 많은 TOP 아이템 영역 --- */}
-        {recommendations && (
-          <View style={styles.recommendationCardWrapper}>
-            <View style={styles.recommendationCard}>
-              <View style={styles.recommendationHeader}>
-                <Text style={styles.recommendationTitle}>
-                  가장 많은 {recommendations.category} 아이템
-                </Text>
-                <Text style={styles.recommendationSubtitle}>
-                  총 {recommendations.totalItems}개의 옷 중에서 추천해요
-                </Text>
-              </View>
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('homeCommunityTitle')}</Text>
+            <TouchableOpacity onPress={() => navigation.jumpTo('Community')}>
+              <Text style={styles.seeAllText}>{t('homeSeeAll')}</Text>
+            </TouchableOpacity>
+          </View>
 
-              <FlatList
-                data={recommendations.items}
+          {communityLoading ? (
+            <ActivityIndicator style={{ marginTop: 16 }} color="#6A0DAD" />
+          ) : communityPosts.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingRight: 20 }}>
+              {communityPosts.map(post => (
+                <TouchableOpacity
+                  key={post.id}
+                  style={styles.communityCard}
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    navigation.navigate('CommunityPostDetail', {
+                      postId: post.id,
+                    })
+                  }>
+                  <Image
+                    source={{ uri: post.imageUrl }}
+                    style={styles.communityImage}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.communityAuthor} numberOfLines={1}>
+                    {post.authorName}
+                  </Text>
+                  <Text style={styles.communityCaption} numberOfLines={1}>
+                    {post.caption || t('communityDefaultCaption')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>{t('homeCommunityEmpty')}</Text>
+              <TouchableOpacity
+                style={styles.emptyAction}
+                onPress={() => navigation.navigate('CommunityCreatePost')}>
+                <Text style={styles.emptyActionText}>
+                  {t('homeQuickCommunity')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.sectionContainer, { marginBottom: 8 }]}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('homeClosetTitle')}</Text>
+            <TouchableOpacity onPress={() => navigation.jumpTo('Closet')}>
+              <Text style={styles.seeAllText}>{t('homeSeeAll')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {closetLoading ? (
+            <ActivityIndicator style={{ marginTop: 16 }} color="#6A0DAD" />
+          ) : recommendations ? (
+            <View style={styles.recommendationCard}>
+              <Text style={styles.recommendationTitle}>
+                {t('homeClosetMostCategory', {
+                  category: recommendations.category,
+                })}
+              </Text>
+              <Text style={styles.recommendationSubtitle}>
+                {t('homeClosetSubtitle', {
+                  count: recommendations.totalItems,
+                })}
+              </Text>
+              <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                keyExtractor={item => item.id}
-                renderItem={({ item }) => (
+                contentContainerStyle={{ paddingTop: 12 }}>
+                {recommendations.items.map(item => (
                   <TouchableOpacity
-                    onPress={() => navigation.navigate('VirtualFitting', { clothingUrl: item.imageUrl })}
+                    key={item.id}
+                    onPress={() =>
+                      navigation.navigate('VirtualFitting', {
+                        clothingUrl: item.imageUrl,
+                      })
+                    }
                     style={styles.recommendationItem}>
                     <Image
                       source={{ uri: item.imageUrl }}
                       style={styles.recommendationImage}
                     />
                   </TouchableOpacity>
-                )}
-                contentContainerStyle={styles.recommendationList}
-              />
+                ))}
+              </ScrollView>
             </View>
-          </View>
-        )}
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>{t('homeClosetEmpty')}</Text>
+              <TouchableOpacity
+                style={styles.emptyAction}
+                onPress={() => navigation.navigate('MallList')}>
+                <Text style={styles.emptyActionText}>{t('homeQuickMall')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </ScrollView>
-      {/* ✅ 중복되는 하단 영역은 제거했습니다. */}
     </SafeAreaView>
   );
 };
@@ -323,16 +513,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 45, // 상단 여백 10 추가 (20 → 30)
-    paddingBottom: 10,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   welcomeMessage: {
     fontSize: 22,
     fontWeight: 'bold',
+    color: '#1A1A1A',
   },
   welcomeSubMessage: {
     fontSize: 14,
-    color: 'gray',
+    color: '#777777',
     marginTop: 4,
   },
   profileIcon: {
@@ -360,93 +551,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  mainCtaCard: {
-    borderRadius: 24,
-    marginHorizontal: 20,
-    marginTop: 15,
-    marginBottom: 10,
-    overflow: 'hidden',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  ctaGradient: {
-    minHeight: 208,
-    overflow: 'hidden',
-    backgroundColor: '#8B5CF6',
-  },
-  backgroundImage: {
-    opacity: 1,
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)', // 더 진한 오버레이로 텍스트 가독성 향상
-    zIndex: 0,
-  },
-  ctaTitleContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    padding: 24,
-    paddingBottom: 8,
-    zIndex: 1,
-  },
-  ctaContentColumn: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 24,
-    paddingTop: 8,
-    zIndex: 1,
-  },
-  ctaContentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  ctaTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  ctaSubtitle: {
-    fontSize: 14,
-    color: '#FFFFFF', // 불투명도 제거하여 더 진하게
-    lineHeight: 22,
-    fontWeight: '600', // '400' → '600'으로 더 굵게
-    flex: 1,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  ctaButton: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-  },
-  ctaButtonText: {
-    color: '#8B5CF6',
-    fontSize: 13,
-    fontWeight: '700',
-  },
   sectionContainer: {
-    marginTop: 15,
+    marginTop: 18,
     paddingLeft: 20,
-    paddingBottom: 20, // 하단 여백 추가
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -458,28 +565,115 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: 'bold',
+    color: '#1A1A1A',
   },
   seeAllText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6A0DAD',
     fontWeight: '600',
   },
-  recommendationCardWrapper: {
-    marginTop: 3,
-    marginBottom: 25, // 하단 여백 추가
-    paddingHorizontal: 20,
+  quickGrid: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    paddingRight: 20,
+    marginTop: 12,
+  },
+  quickCardPrimaryWrap: {
+    flex: 4.5,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  quickCardPrimary: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    minHeight: 118,
+  },
+  quickIconPrimary: {
+    width: 26,
+    height: 26,
+    marginBottom: 10,
+    tintColor: '#6A0DAD',
+  },
+  quickIcon: {
+    width: 18,
+    height: 18,
+    marginBottom: 6,
+    tintColor: '#6A0DAD',
+  },
+  quickSideColumn: {
+    flex: 5.5,
+    gap: 10,
+  },
+  quickCardSide: {
+    flex: 1,
+    backgroundColor: '#F7F3FB',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  quickTitlePrimary: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4A1A7A',
+    marginBottom: 6,
+  },
+  quickSubtitlePrimary: {
+    fontSize: 12,
+    color: '#7A6A8A',
+    lineHeight: 17,
+  },
+  quickTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4A1A7A',
+    marginBottom: 4,
+  },
+  quickSubtitle: {
+    fontSize: 11,
+    color: '#7A6A8A',
+    lineHeight: 15,
+  },
+  feedCard: {
+    width: 135,
+    height: 135,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 16,
+    marginRight: 12,
+  },
+  communityCard: {
+    width: 140,
+    marginRight: 12,
+  },
+  communityImage: {
+    width: 140,
+    height: 140,
+    borderRadius: 14,
+    backgroundColor: '#F0F0F0',
+  },
+  communityAuthor: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#222222',
+  },
+  communityCaption: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#777777',
   },
   recommendationCard: {
     backgroundColor: '#F8F9FA',
     borderRadius: 16,
     padding: 16,
-    marginTop: 2,
-  },
-  recommendationHeader: {
-    marginBottom: 12,
+    marginRight: 20,
   },
   recommendationTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#1A1A2E',
   },
@@ -487,9 +681,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666666',
     marginTop: 4,
-  },
-  recommendationList: {
-    paddingRight: 0,
   },
   recommendationItem: {
     marginRight: 12,
@@ -500,23 +691,32 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#E0E0E0',
   },
-  feedCard: {
-    width: 135, // 150 * 0.9 (10% 감소)
-    height: 180, // 200 * 0.9 (10% 감소)
-    backgroundColor: '#F0F0F0',
-    borderRadius: 16,
-    marginRight: 12,
-  },
   emptyCard: {
-    width: '95%',
-    height: 100,
+    marginRight: 20,
+    minHeight: 100,
     backgroundColor: '#F7F7F7',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
   },
   emptyText: {
-    color: 'gray',
+    color: '#777777',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  emptyAction: {
+    marginTop: 10,
+    backgroundColor: '#6A0DAD',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  emptyActionText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
 

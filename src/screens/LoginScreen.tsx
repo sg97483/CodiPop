@@ -107,6 +107,9 @@ const LoginScreen = () => {
       </View>
 
       <View style={[styles.footer, {paddingBottom: insets.bottom + 16}]}>
+        <Text style={styles.eulaNotice}>
+          로그인 시 커뮤니티 이용약관(EULA)에 동의하게 됩니다. 부적절한(음란/폭력/혐오) 콘텐츠 및 욕설 사용에 대해 무관용(Zero Tolerance) 원칙을 적용하며 제재될 수 있습니다.
+        </Text>
         {loading ? (
           <ActivityIndicator size="large" color={BRAND_PRIMARY} />
         ) : (
@@ -201,6 +204,14 @@ const styles = StyleSheet.create({
   icon: {
     width: 22,
     height: 22,
+  },
+  eulaNotice: {
+    fontSize: 11,
+    color: '#888888',
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 8,
+    marginBottom: 4,
   },
 });
 

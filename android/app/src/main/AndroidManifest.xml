@@ -7,6 +7,13 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- Android 13 (API 33) 이상에서 사용 -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Google Mobile Ads: Android 13+ 광고 ID 권한 -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
 
     <application
       android:name=".MainApplication"
@@ -15,6 +22,20 @@
       android:allowBackup="false"
       android:theme="@style/BootTheme"
       android:usesCleartextTraffic="true">
+      <!-- FCM 기본 알림 채널 및 아이콘 설정 -->
+      <meta-data
+        android:name="com.google.firebase.messaging.default_notification_channel_id"
+        android:value="codipop_vip_channel_v1"
+        tools:replace="android:value" />
+      <meta-data
+        android:name="com.google.firebase.messaging.default_notification_icon"
+        android:resource="@mipmap/ic_launcher"
+        tools:replace="android:resource" />
+      <!-- Google Mobile Ads App ID (테스트용) -->
+      <meta-data
+        android:name="com.google.android.gms.ads.APPLICATION_ID"
+        android:value="ca-app-pub-6990308526694074~9247918170"
+        tools:replace="android:value"/>
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
@@ -25,6 +46,16 @@
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="image/*" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.SEND_MULTIPLE" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="image/*" />
         </intent-filter>
       </activity>
 

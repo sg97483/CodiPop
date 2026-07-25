@@ -2,7 +2,6 @@
 
 import React, {useState, useEffect, useMemo} from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -12,12 +11,20 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Linking,
 } from 'react-native';
 import {useIsFocused, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import {useTranslation} from 'react-i18next';
+import Toast from 'react-native-toast-message';
+import {
+  mapWishlistDocs,
+  removeFromWishlist,
+} from '../services/wishlistService';
+import type { WishlistItem } from '../types/shopping';
 
 interface RecentCodiItem {
   id: string;
@@ -43,10 +50,12 @@ const RecentCodiScreen = () => {
   const navigation = useNavigation<RecentCodiScreenNavigationProp>();
   const user = auth().currentUser;
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   
   const [loading, setLoading] = useState(true);
   const [recentCodiItems, setRecentCodiItems] = useState<RecentCodiItem[]>([]);
-  const [activeTab, setActiveTab] = useState<'전체' | '찜한 코디'>('전체');
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [activeTab, setActiveTab] = useState<'전체' | '찜한 코디' | '위시리스트'>('전체');
   const [activeFilter, setActiveFilter] = useState<'최신순' | '월별' | '년도별' | '일별'>('최신순');
   const [imageLoading, setImageLoading] = useState<{[key: string]: boolean}>({});
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -82,6 +91,31 @@ const RecentCodiScreen = () => {
       return () => subscriber();
     }
   }, [isFocused, user]);
+
+  useEffect(() => {
+    if (!isFocused || !user || activeTab !== '위시리스트') {
+      return;
+    }
+
+    setLoading(true);
+    const subscriber = firestore()
+      .collection('users')
+      .doc(user.uid)
+      .collection('wishlist')
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(
+        querySnapshot => {
+          setWishlistItems(mapWishlistDocs(querySnapshot.docs));
+          setLoading(false);
+        },
+        error => {
+          console.error('위시리스트 로딩 실패:', error);
+          setLoading(false);
+        },
+      );
+
+    return () => subscriber();
+  }, [isFocused, user, activeTab]);
 
   // 날짜별 그룹화 함수
   const groupItemsByDate = (items: RecentCodiItem[], filterType: string): CodiGroup[] => {
@@ -239,6 +273,69 @@ const RecentCodiScreen = () => {
       isLiked: item.isLiked,
     });
   };
+
+  const handleOpenWishlistProduct = async (item: WishlistItem) => {
+    if (!item.productUrl) {
+      Toast.show({ type: 'info', text1: t('productLinkMissing') });
+      return;
+    }
+
+    const canOpen = await Linking.canOpenURL(item.productUrl);
+    if (!canOpen) {
+      Toast.show({ type: 'error', text1: t('productLinkInvalid') });
+      return;
+    }
+    await Linking.openURL(item.productUrl);
+  };
+
+  const handleRemoveWishlistItem = (item: WishlistItem) => {
+    if (!user) {
+      return;
+    }
+
+    Alert.alert(t('wishlistRemoveTitle'), t('wishlistRemoveMessage'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('delete'),
+        style: 'destructive',
+        onPress: async () => {
+          await removeFromWishlist(user.uid, item.id);
+          Toast.show({ type: 'success', text1: t('wishlistRemoved') });
+        },
+      },
+    ]);
+  };
+
+  const renderWishlistItem = ({ item }: { item: WishlistItem }) => (
+    <View style={styles.wishlistCard}>
+      <Image source={{ uri: item.imageUrl }} style={styles.wishlistImage} />
+      <View style={styles.wishlistInfo}>
+        <Text style={styles.wishlistName} numberOfLines={1}>
+          {item.productName || t('productNameMissing')}
+        </Text>
+        <Text style={styles.wishlistShop} numberOfLines={1}>
+          {item.shopName || t('shopNameMissing')}
+        </Text>
+        {item.productPrice ? (
+          <Text style={styles.wishlistPrice}>
+            {item.productPrice.toLocaleString()}원
+          </Text>
+        ) : null}
+        <View style={styles.wishlistActions}>
+          <TouchableOpacity
+            style={styles.wishlistBuyButton}
+            onPress={() => handleOpenWishlistProduct(item)}>
+            <Text style={styles.wishlistBuyText}>{t('buyNow')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.wishlistRemoveButton}
+            onPress={() => handleRemoveWishlistItem(item)}>
+            <Text style={styles.wishlistRemoveText}>{t('removeFromWishlist')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
 
   // 그리드 아이템 렌더링
   const renderGridItem = ({item}: {item: RecentCodiItem}) => (
@@ -410,7 +507,7 @@ const RecentCodiScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, {paddingTop: insets.top}]}>
       {/* 헤더 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>코디북</Text>
@@ -439,6 +536,17 @@ const RecentCodiScreen = () => {
             찜한 코디
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === '위시리스트' && styles.activeTab]}
+          onPress={() => setActiveTab('위시리스트')}>
+          <Text style={[
+            styles.tabText,
+            activeTab === '위시리스트' && styles.activeTabText
+          ]}>
+            {t('wishlistTab')}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* 전체 탭에서만 필터 버튼들 표시 */}
@@ -464,6 +572,21 @@ const RecentCodiScreen = () => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6A0DAD" />
         </View>
+      ) : activeTab === '위시리스트' ? (
+        wishlistItems.length > 0 ? (
+          <FlatList
+            data={wishlistItems}
+            keyExtractor={item => item.id}
+            renderItem={renderWishlistItem}
+            contentContainerStyle={[styles.wishlistContainer, { paddingBottom: insets.bottom + 20 }]}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>{t('wishlistEmpty')}</Text>
+            <Text style={styles.emptySubText}>{t('wishlistEmptyHint')}</Text>
+          </View>
+        )
       ) : groupedData && groupedData.length > 0 ? (
         // 그룹화된 데이터 표시
         <FlatList
@@ -497,7 +620,7 @@ const RecentCodiScreen = () => {
           </Text>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -704,6 +827,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
+  },
+  wishlistContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  wishlistCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#EEE',
+    padding: 12,
+    marginBottom: 12,
+  },
+  wishlistImage: {
+    width: 84,
+    height: 84,
+    borderRadius: 10,
+    backgroundColor: '#F4F4F4',
+  },
+  wishlistInfo: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center',
+  },
+  wishlistName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#222',
+  },
+  wishlistShop: {
+    fontSize: 12,
+    color: '#777',
+    marginTop: 2,
+  },
+  wishlistPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6A0DAD',
+    marginTop: 6,
+  },
+  wishlistActions: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+  },
+  wishlistBuyButton: {
+    backgroundColor: '#6A0DAD',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  wishlistBuyText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  wishlistRemoveButton: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#F2F2F7',
+  },
+  wishlistRemoveText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

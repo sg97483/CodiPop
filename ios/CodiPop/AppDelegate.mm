@@ -33,8 +33,8 @@ static void _forceLinkRNScreensSymbols(void) {
   _ = RNSSafeAreaViewCls();
   _ = RNSScreenStackHostCls();
   _ = RNSSplitViewHostCls();
-  _ = RNSSplitViewScreenCls();
-  _ = RNSStackScreenCls();
+  // _ = RNSSplitViewScreenCls(); // 주석 처리: static framework에서 링크되지 않음
+  // _ = RNSStackScreenCls(); // 주석 처리: static framework에서 링크되지 않음
 }
 #endif
 
@@ -47,7 +47,7 @@ static void _forceLinkRNScreensSymbols(void) {
   
 #if RCT_NEW_ARCH_ENABLED
   // react-native-screens Fabric 컴포넌트 심볼을 강제로 링크
-  _forceLinkRNScreensSymbols();
+  // _forceLinkRNScreensSymbols(); // 주석 처리: static framework에서 심볼 링크 문제
 #endif
   
   self.moduleName = @"CodiPop";
