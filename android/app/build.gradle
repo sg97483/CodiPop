@@ -148,7 +148,7 @@ android {
     // true: 라이브러리가 apk에서 추출되어 디스크에 복사 (더 많은 공간 필요하지만 호환성 향상)
     packaging {
         jniLibs {
-            useLegacyPackaging = false // AGP 8.7.0이므로 false 사용 가능
+            useLegacyPackaging = true // 16KB 페이지 호환성 문제 해결을 위해 true로 변경
         }
     }
     
