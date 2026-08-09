@@ -65,6 +65,15 @@ import {
 import { CodiPopLoadingAnimation } from '../components/CodiPopLoadingAnimation';
 import { CodiPopViralWatermark } from '../components/CodiPopViralWatermark';
 
+/**
+ * 앱 실행 1회를 식별하는 값.
+ * 서버 리포트의 "1인당 평균 피팅"이 이 단위로 계산됩니다.
+ * 로그인 전에도 필요하므로 uid 와 별개로 둡니다.
+ */
+const APP_SESSION_ID = `app_${Date.now().toString(36)}_${Math.random()
+  .toString(36)
+  .slice(2, 10)}`;
+
 const adUnitId = __DEV__
   ? TestIds.REWARDED
   : Platform.OS === 'ios'
@@ -708,6 +717,34 @@ const VirtualFittingScreen = () => {
       formData.append('heightCm', String(bodyProfile.heightCm));
       formData.append('weightKg', String(bodyProfile.weightKg));
       formData.append('usualSize', bodyProfile.usualSize);
+    }
+
+    // 어떤 옷을 입어봤는지 서버 리포트에 남긴다.
+    //
+    // 이 값이 없으면 앱 피팅이 전부 한 덩어리로 뭉쳐서, "앱에서 어느 몰 상품이
+    // 많이 피팅되는가"를 알 수 없다. **그게 곧 다음 영업 리스트다** — 우리 앱에서
+    // 이미 수요가 확인된 몰이기 때문이다.
+    //
+    // mallId 는 보내지 않는다. 그 값은 우리 제휴 고객사(테넌트)를 가리키는 것이라,
+    // 사용자가 옷을 담아온 몰 이름을 넣으면 제휴하지도 않은 몰이 고객사 통계로 잡힌다.
+    const primaryItem = buildClothingItemsFromSelection(
+      selectedClothingImages,
+      closetItems,
+    )[0];
+    if (primaryItem) {
+      if (primaryItem.closetItemId) {
+        formData.append('productId', primaryItem.closetItemId);
+      }
+      if (primaryItem.productName) {
+        formData.append('productName', primaryItem.productName);
+      }
+      if (primaryItem.shopName) {
+        formData.append('shopName', primaryItem.shopName);
+      }
+    }
+    formData.append('sessionId', APP_SESSION_ID);
+    if (user?.uid) {
+      formData.append('userId', user.uid);
     }
 
     try {

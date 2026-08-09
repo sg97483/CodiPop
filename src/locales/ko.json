@@ -248,6 +248,9 @@
     "sizeReasonOuter": "아우터는 겹쳐 입는 경우가 많아 {{recommendedSize}}를 추천해요.",
     "sizeReasonProductMatch": "상품 표기 {{productSize}}와 내 추천 {{recommendedSize}}가 잘 맞아요.",
     "sizeReasonProductSmall": "상품 표기 {{productSize}}보다 여유 있는 {{recommendedSize}}를 권장해요.",
-    "sizeReasonProductLarge": "상품 표기 {{productSize}}보다 작은 {{recommendedSize}}도 고려해 보세요."
+    "sizeReasonProductLarge": "상품 표기 {{productSize}}보다 작은 {{recommendedSize}}도 고려해 보세요.",
+    "sizeFitFits": "잘 맞음",
+    "sizeFitTight": "타이트할 수 있음",
+    "sizeFitLoose": "여유 있음"
   }
 }

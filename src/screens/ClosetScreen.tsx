@@ -21,6 +21,7 @@ import ProductInfoModal from '../components/ProductInfoModal';
 import { updateClosetProductInfo } from '../services/closetService';
 import { getBodySizeProfile } from '../services/bodySizeService';
 import { recommendClothingSize } from '../services/sizeRecommendService';
+import { describeForProduct } from '../services/productSizeService';
 import type { ClosetItemRecord } from '../types/shopping';
 import type { BodySizeProfile } from '../types/bodySize';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -38,6 +39,14 @@ type ClosetScreenNavigationProp = CompositeNavigationProp<
 >;
 
 interface ClosetItem extends ClosetItemRecord {}
+
+/** 목록 배지에 넣을 짧은 핏 표현. 한 줄이라 문장을 다 넣을 수 없다. */
+const FIT_LABEL_KEY = {
+  fits: 'sizeFitFits',
+  tight: 'sizeFitTight',
+  loose: 'sizeFitLoose',
+  unknown: '',
+} as const;
 
 const ClosetScreen = () => {
   const navigation = useNavigation<ClosetScreenNavigationProp>();
@@ -192,6 +201,37 @@ const ClosetScreen = () => {
         }
       }
     }
+  };
+
+  /**
+   * 옷장 목록의 사이즈 배지.
+   *
+   * 국내 몰 상품은 대부분 `F(55~66)` 이나 `S,M,L` 표기라, 알파벳으로만 비교하면
+   * **상품 사이즈가 조용히 무시되어** 아무 안내도 못 봅니다.
+   * `describeForProduct` 로 그 상품이 실제로 파는 사이즈에 맞춰 번역합니다.
+   */
+  const describeItemSize = (
+    item: { productSize?: string; category?: string },
+    profile: BodySizeProfile,
+  ): string => {
+    const result = recommendClothingSize({
+      ...profile,
+      category: item.category,
+      productSize: item.productSize,
+    });
+
+    const advice = describeForProduct(result.recommendedSize, item.productSize);
+    if (!advice) {
+      // 표기를 해석하지 못한 경우 (자유 서술 등) — 기존 문구를 그대로 씁니다.
+      return t('sizeItemCompare', {
+        product: item.productSize,
+        recommended: result.recommendedSize,
+      });
+    }
+
+    const fitKey = FIT_LABEL_KEY[advice.fit];
+    const fit = fitKey ? ` · ${t(fitKey)}` : '';
+    return `${t('sizeItemOnly', { size: advice.offered })}${fit}`;
   };
 
   const handleDeleteItem = (itemId: string) => {
@@ -368,14 +408,7 @@ const ClosetScreen = () => {
                 {item.productSize ? (
                   <Text style={styles.sizeBadge} numberOfLines={1}>
                     {bodyProfile
-                      ? t('sizeItemCompare', {
-                          product: item.productSize,
-                          recommended: recommendClothingSize({
-                            ...bodyProfile,
-                            category: item.category,
-                            productSize: item.productSize,
-                          }).recommendedSize,
-                        })
+                      ? describeItemSize(item, bodyProfile)
                       : t('sizeItemOnly', { size: item.productSize })}
                   </Text>
                 ) : null}

@@ -248,6 +248,9 @@
     "sizeReasonOuter": "For outerwear layering, we recommend {{recommendedSize}}.",
     "sizeReasonProductMatch": "Labeled {{productSize}} matches your recommended {{recommendedSize}}.",
     "sizeReasonProductSmall": "Labeled {{productSize}} may feel tight — try {{recommendedSize}}.",
-    "sizeReasonProductLarge": "Labeled {{productSize}} may feel roomy — {{recommendedSize}} is also an option."
+    "sizeReasonProductLarge": "Labeled {{productSize}} may feel roomy — {{recommendedSize}} is also an option.",
+    "sizeFitFits": "Good fit",
+    "sizeFitTight": "May be tight",
+    "sizeFitLoose": "Roomy"
   }
 }
