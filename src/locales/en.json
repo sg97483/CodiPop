@@ -251,6 +251,12 @@
     "sizeReasonProductLarge": "Labeled {{productSize}} may feel roomy — {{recommendedSize}} is also an option.",
     "sizeFitFits": "Good fit",
     "sizeFitTight": "May be tight",
-    "sizeFitLoose": "Roomy"
+    "sizeFitLoose": "Roomy",
+    "ticketShortage": "Not enough tickets",
+    "ticketShortageMessage": "You need more Style Tickets. Watch an ad or check in daily to top up.",
+    "tooManyRequests": "Too many requests",
+    "tooManyRequestsMessage": "Please try again in a moment.",
+    "loginExpiredMessage": "Your session expired. Please sign in again.",
+    "loginRequired": "Sign-in required"
   }
 }

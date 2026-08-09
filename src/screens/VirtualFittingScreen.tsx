@@ -747,6 +747,25 @@ const VirtualFittingScreen = () => {
       formData.append('userId', user.uid);
     }
 
+    // 로그인 토큰. **이게 있어야 서버가 티켓을 검증하고 직접 차감합니다.**
+    //
+    // 그동안 티켓은 앱에서만 막았고 서버는 쳐다보지도 않았습니다. `/try-on` 을 직접
+    // 호출하면 티켓 없이 무제한이었고, 건당 56.2원이 그대로 나갔습니다.
+    // 앱에 심어둔 키는 바이너리에서 추출되므로 키로는 막을 수 없고,
+    // 남의 계정 토큰은 만들 수 없으므로 토큰이 보안 경계가 됩니다.
+    let serverChargedTickets = false;
+    try {
+      const idToken = await auth().currentUser?.getIdToken();
+      if (idToken) {
+        formData.append('idToken', idToken);
+        serverChargedTickets = true;
+      }
+    } catch (tokenError) {
+      // 토큰을 못 얻어도 피팅은 진행합니다. 서버가 레거시 경로로 받아 주고,
+      // 티켓은 아래에서 앱이 차감합니다.
+      console.warn('ID 토큰 발급 실패, 로컬 차감으로 진행:', tokenError);
+    }
+
     try {
       const response = await fetch(
         'https://codipop-backend.onrender.com/try-on',
@@ -758,16 +777,41 @@ const VirtualFittingScreen = () => {
         },
       );
       const result = await response.json();
+
+      // 서버가 돌려주는 거절 사유를 그대로 안내합니다.
+      // 이 값들이 없으면 전부 "피팅 실패"로만 보여 사용자가 무엇을 해야 할지 모릅니다.
+      if (response.status === 402) {
+        // 로딩 해제는 아래 finally 블록이 처리합니다.
+        if (typeof result.ticketBalance === 'number') {
+          setTicketBalance(result.ticketBalance);
+        }
+        Alert.alert(t('ticketShortage'), result.message || t('ticketShortageMessage'));
+        return;
+      }
+      if (response.status === 429) {
+        Alert.alert(t('tooManyRequests'), result.message || t('tooManyRequestsMessage'));
+        return;
+      }
+      if (response.status === 401) {
+        Alert.alert(t('loginRequired'), result.message || t('loginExpiredMessage'));
+        return;
+      }
+
       if (result.success && result.imageUrl) {
-        // 이미지 합성 성공 시 티켓 소모 및 레거시 횟수 업데이트
-        const deductRes = await deductTickets(TICKET_COST_FITTING, 'AI_FITTING');
-        setTicketBalance(deductRes.balance);
+        // 티켓 차감. **서버가 이미 차감했으면 앱은 차감하지 않습니다** — 안 그러면 두 번 빠집니다.
+        let nextBalance: number;
+        if (serverChargedTickets && typeof result.ticketBalance === 'number') {
+          nextBalance = result.ticketBalance;
+        } else {
+          nextBalance = (await deductTickets(TICKET_COST_FITTING, 'AI_FITTING')).balance;
+        }
+        setTicketBalance(nextBalance);
         await incrementDailyUsage();
         const { remainingCount: newRemaining } = await checkDailyUsage();
         setRemainingCount(newRemaining);
 
         setResultImage(result.imageUrl);
-        Toast.show({ type: 'success', text1: t('fittingComplete'), text2: `티켓 -${TICKET_COST_FITTING}장 소모 (잔액: ${deductRes.balance}장)` });
+        Toast.show({ type: 'success', text1: t('fittingComplete'), text2: `티켓 -${TICKET_COST_FITTING}장 소모 (잔액: ${nextBalance}장)` });
         if (user) {
           try {
             const clothingItems = buildClothingItemsFromSelection(
