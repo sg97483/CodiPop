@@ -61,6 +61,7 @@ import {
   getUserReferralCode,
   TICKET_COST_FITTING,
   TICKET_REWARD_AD,
+  TICKET_REWARD_REFERRAL,
 } from '../services/ticketService';
 import { CodiPopLoadingAnimation } from '../components/CodiPopLoadingAnimation';
 import { CodiPopViralWatermark } from '../components/CodiPopViralWatermark';
@@ -162,18 +163,18 @@ const VirtualFittingScreen = () => {
           pendingAdRewardTypeRef.current = 'RECHARGE';
           Toast.show({
             type: 'success',
-            text1: '광고 시청 완료! ✨',
+            text1: '광고 시청 완료',
             text2: '워터마크 없는 HD 원본 저장을 시작합니다.',
           });
           processDownloadImage(false);
         } else {
-          // 보상 지급: 티켓 +3장 충전 (2단계 수익화 적용)
+          // 보상 지급 (티켓 1장 = 피팅 1회)
           addTickets(TICKET_REWARD_AD, 'REWARD_AD').then(newBalance => {
             setTicketBalance(newBalance);
             Toast.show({
               type: 'success',
-              text1: `+${TICKET_REWARD_AD}장 충전 완료! 🎉`,
-              text2: `현재 보유 티켓: ${newBalance}장 (1회 피팅 10장 소모)`,
+              text1: `티켓 +${TICKET_REWARD_AD}장 충전 완료`,
+              text2: `보유 ${newBalance}장 · 피팅 ${newBalance}회 가능`,
             });
           });
           decreaseDailyUsageCount(); // 레거시 일일 횟수도 함께 완화
@@ -405,9 +406,14 @@ const VirtualFittingScreen = () => {
     return Math.max(220, Math.min(calculatedHeight, maxHeight));
   }, [gridItems.length]);
 
-  // 패널 translateY 계산 (높이의 대부분만 올라오도록)
+  // 접었을 때 얼마나 보일지.
+  //
+  // 예전에는 높이의 20%를 남겼는데, 패널이 커질수록 남는 부분도 커져서
+  // **결과 사진 아래를 가렸습니다.** 손잡이와 '내 옷장' 글자만 보이도록
+  // 고정 높이로 바꿉니다 — 패널이 아무리 커져도 사진을 더 가리지 않습니다.
+  const PANEL_PEEK_HEIGHT = 56;
   const panelTranslateY = useMemo(() => {
-    return panelHeight * 0.8; // 높이의 80% 정도만 올라오도록
+    return Math.max(0, panelHeight - PANEL_PEEK_HEIGHT);
   }, [panelHeight]);
 
   // 사람 이미지 선택 함수
@@ -667,12 +673,12 @@ const VirtualFittingScreen = () => {
     if (currentBalance < TICKET_COST_FITTING) {
       setTicketBalance(currentBalance);
       Alert.alert(
-        '🎟️ 스타일 티켓 부족',
-        `AI 가상 피팅 1회에 티켓 ${TICKET_COST_FITTING}장이 필요합니다.\n(현재 보유: ${currentBalance}장)\n\n짧은 광고를 보고 티켓 +${TICKET_REWARD_AD}장을 충전하시겠습니까?`,
+        '스타일 티켓 부족',
+        `피팅 1회에 티켓 ${TICKET_COST_FITTING}장이 필요합니다.\n(현재 보유: ${currentBalance}장)\n\n짧은 광고를 보고 티켓 ${TICKET_REWARD_AD}장을 받으시겠습니까?`,
         [
           { text: '취소', style: 'cancel' },
           {
-            text: `광고 보고 +${TICKET_REWARD_AD}장 충전 🎥`,
+            text: `광고 보고 티켓 ${TICKET_REWARD_AD}장 받기`,
             onPress: () => showRewardAd('RECHARGE'),
             style: 'default',
           },
@@ -811,7 +817,7 @@ const VirtualFittingScreen = () => {
         setRemainingCount(newRemaining);
 
         setResultImage(result.imageUrl);
-        Toast.show({ type: 'success', text1: t('fittingComplete'), text2: `티켓 -${TICKET_COST_FITTING}장 소모 (잔액: ${nextBalance}장)` });
+        Toast.show({ type: 'success', text1: t('fittingComplete'), text2: `티켓 ${TICKET_COST_FITTING}장 사용 · 남은 ${nextBalance}장` });
         if (user) {
           try {
             const clothingItems = buildClothingItemsFromSelection(
@@ -933,8 +939,8 @@ const VirtualFittingScreen = () => {
           await CameraRoll.save(uri, { type: 'photo' });
           Toast.show({
             type: 'success',
-            text1: '🎁 바이럴 워터마크(QR+초대코드) 포함 저장 완료 📸',
-            text2: 'SNS 공유하고 친구 초대하여 무료 티켓 20장 받아보세요! ✨',
+            text1: '갤러리에 저장했어요',
+            text2: `SNS 에 공유하면 친구 초대 보상 티켓 ${TICKET_REWARD_REFERRAL}장을 받을 수 있어요`,
           });
           return;
         } catch (captureError) {
@@ -953,14 +959,14 @@ const VirtualFittingScreen = () => {
         });
         Toast.show({
           type: 'success',
-          text1: isWatermarked ? t('imageShared') : '✨ HD 고화질 원본이 저장/공유되었습니다!',
+          text1: isWatermarked ? t('imageShared') : '고화질 원본을 저장·공유했어요',
         });
       } else {
         // Android에서는 갤러리 저장 수행
         await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
         Toast.show({
           type: 'success',
-          text1: isWatermarked ? t('imageSavedToGallery') : '✨ HD 고화질 원본이 갤러리에 저장되었습니다!',
+          text1: isWatermarked ? t('imageSavedToGallery') : '고화질 원본을 갤러리에 저장했어요',
         });
       }
     } catch (error: any) {
@@ -1007,9 +1013,12 @@ const VirtualFittingScreen = () => {
       return;
     }
 
+    // 문구를 최소화합니다 (기획 요청).
+    // 예전에는 한 줄에 워터마크·QR·초대코드·보너스까지 다 넣어 읽히지 않았습니다.
+    // 선택지는 "무엇을 받는가" 만 남기고, 조건은 괄호 한 마디로 줄입니다.
     const options = [
-      '✨ 워터마크 없는 HD 고화질 원본 저장 (광고 1회 시청)',
-      '🎁 바이럴 워터마크(QR+초대코드) 포함 저장 (SNS 공유 시 +20장 보너스!)',
+      '고화질로 저장 (광고 시청)',
+      '일반 저장',
       t('cancel'),
     ];
     const cancelButtonIndex = 2;
@@ -1018,8 +1027,7 @@ const VirtualFittingScreen = () => {
       {
         options,
         cancelButtonIndex,
-        title: '이미지 저장 옵션 선택',
-        message: '고해상도 HD 원본으로 저장하시려면 짧은 광고를 시청해 주세요.',
+        title: '저장 방식 선택',
       },
       async (selectedIndex?: number) => {
         if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) {
@@ -1027,20 +1035,20 @@ const VirtualFittingScreen = () => {
         }
 
         if (selectedIndex === 0) {
-          // ✨ HD 고화질 원본 저장 (광고 시청 후 저장)
+          // 고화질 원본 저장 (광고 시청 후)
           Alert.alert(
-            'HD 고화질 다운로드 ✨',
-            '짧은 보상형 광고를 시청하시면 워터마크 없는 고해상도(HD) 원본 이미지가 갤러리에 저장됩니다.',
+            '고화질로 저장',
+            '짧은 광고를 보시면 워터마크 없는 고화질 원본이 저장됩니다.',
             [
               { text: '취소', style: 'cancel' },
               {
-                text: '광고 보고 HD 저장 🎥',
+                text: '광고 보고 저장',
                 onPress: () => showRewardAd('HD_DOWNLOAD'),
               },
             ],
           );
         } else if (selectedIndex === 1) {
-          // 🖼️ 일반 화질 (워터마크 포함) 저장
+          // 일반 저장 — 코디팝 워터마크(QR·초대코드)가 함께 들어갑니다.
           await processDownloadImage(true);
         }
       },
@@ -1145,14 +1153,14 @@ const VirtualFittingScreen = () => {
         <View style={styles.fittingCountBadge}>
           {isDevBypassUser() || ticketBalance >= 9999 ? (
             <Text style={styles.fittingCountText}>
-              🎟️ DEV 무한 피팅{' '}
-              <Text style={[styles.fittingCountNumber, { color: '#6A0DAD' }]}>
-                ⚡ 999+장
+              DEV 무한 피팅{' '}
+              <Text style={[styles.fittingCountNumber, styles.fittingCountNumberDev]}>
+                999+장
               </Text>
             </Text>
           ) : (
             <Text style={styles.fittingCountText}>
-              🎟️ 보유 티켓:{' '}
+              보유 티켓{' '}
               <Text
                 style={[
                   styles.fittingCountNumber,
@@ -1160,7 +1168,7 @@ const VirtualFittingScreen = () => {
                 ]}>
                 {ticketBalance}장
               </Text>
-              <Text style={{ fontSize: 11, color: '#6A0DAD', fontWeight: '500' }}> (1회 -{TICKET_COST_FITTING}장)</Text>
+              <Text style={styles.ticketUnitHint}> · 1회 {TICKET_COST_FITTING}장</Text>
             </Text>
           )}
         </View>
@@ -1168,7 +1176,7 @@ const VirtualFittingScreen = () => {
           style={styles.adRechargeButton}
           onPress={() => showRewardAd('RECHARGE')}
           activeOpacity={0.8}>
-          <Text style={styles.adRechargeButtonText}>🎥 +{TICKET_REWARD_AD}장 충전</Text>
+          <Text style={styles.adRechargeButtonText}>티켓 {TICKET_REWARD_AD}장 받기</Text>
         </TouchableOpacity>
       </View>
 
@@ -1211,7 +1219,7 @@ const VirtualFittingScreen = () => {
           <TouchableOpacity
             style={styles.changePersonButton}
             onPress={handleSelectPerson}>
-            <Text style={styles.changePersonText}>👤 사람 변경</Text>
+            <Text style={styles.changePersonText}>사람 변경</Text>
           </TouchableOpacity>
         )}
 
@@ -1232,19 +1240,13 @@ const VirtualFittingScreen = () => {
                   useNativeDriver: true,
                 }).start();
               }}>
-              <Text style={styles.changePersonText}>다시 입어보기 🔄</Text>
+              <Text style={styles.changePersonText}>다시 입어보기</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleDownloadImage}
               activeOpacity={0.8}
               style={styles.downloadButtonWrapper}>
-              <LinearGradient
-                colors={['#FF6B9D', '#8B5CF6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.downloadButtonGradient}>
-                <Text style={styles.downloadButtonText}>📥 다운로드</Text>
-              </LinearGradient>
+              <Text style={styles.downloadButtonText}>저장</Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -1415,11 +1417,11 @@ const VirtualFittingScreen = () => {
             <View style={styles.workthroughContent}>
               <View style={styles.workthroughTooltip}>
                 <Text style={styles.workthroughTitle}>
-                  👤 1단계: 사람 이미지 선택
+                  1단계: 사람 이미지 선택
                 </Text>
                 <Text style={styles.workthroughDescription}>
                   먼저 사람 이미지를 선택해주세요.{'\n'}
-                  왼쪽 상단의 "👤 사람 변경" 버튼을 눌러{'\n'}
+                  왼쪽 상단의 "사람 변경" 버튼을 눌러{'\n'}
                   갤러리에서 사진을 선택할 수 있습니다.
                 </Text>
                 <TouchableOpacity
@@ -1491,12 +1493,11 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   fittingCountBadge: {
-    backgroundColor: '#F3E8FF',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#D8B4FE',
+    // 테두리를 없애고 배경만 옅게 — 상단에 박스가 너무 많다는 지적 반영
+    backgroundColor: '#F6EEFF',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -1513,18 +1514,20 @@ const styles = StyleSheet.create({
     color: '#E53E3E',
   },
   adRechargeButton: {
-    backgroundColor: '#6A0DAD',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 16,
-    shadowColor: '#6A0DAD',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  fittingCountNumberDev: {
+    color: '#6A0DAD',
+  },
+  ticketUnitHint: {
+    fontSize: 11,
+    color: '#6A0DAD',
+    fontWeight: '500',
   },
   adRechargeButtonText: {
-    color: '#FFFFFF',
+    // 보라 박스 대신 글씨 색만 (기획 요청)
+    color: '#6A0DAD',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1588,10 +1591,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1655,7 +1658,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   downloadButtonText: {
-    color: 'white',
+    // 박스 대신 글씨 색만으로 구분합니다 (기획 요청).
+    color: '#6A0DAD',
     fontWeight: '700',
     fontSize: 15,
     letterSpacing: -0.3,
@@ -1664,11 +1668,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 20,
-    borderRadius: 20,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
     elevation: 6,
   },
   downloadButtonGradient: {

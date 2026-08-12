@@ -27,6 +27,7 @@ import {
   claimReferralCode,
   TICKET_REWARD_REFERRAL,
 } from '../services/ticketService';
+import { buildStoreLinksText } from '../constants/appLinks';
 
 const ProfileScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -51,7 +52,15 @@ const ProfileScreen = () => {
     if (!referralCode) return;
     try {
       await Share.share({
-        message: `[CodiPop AI 가상 피팅 초대]\n가입 시 초대 코드 [ ${referralCode} ] 를 입력하고 무료 피팅 티켓 +${TICKET_REWARD_REFERRAL}장(2회권)을 받아보세요! ✨`,
+        // "+20장(2회권)" 처럼 단위가 섞여 무슨 뜻인지 읽히지 않는다는 지적을 받았습니다.
+        // 티켓 1장 = 피팅 1회이므로 "티켓 N장(N회)" 한 가지로만 씁니다.
+        message: [
+          '[코디팝] AI 가상 피팅 초대',
+          `초대 코드 ${referralCode} 를 입력하시면 피팅 티켓 ${TICKET_REWARD_REFERRAL}장(${TICKET_REWARD_REFERRAL}회)을 드려요.`,
+          buildStoreLinksText(),
+        ]
+          .filter(Boolean)
+          .join('\n'),
       });
     } catch (error) {
       console.error('공유하기 실패:', error);
@@ -298,7 +307,7 @@ const ProfileScreen = () => {
           ) : (
             <View style={styles.claimedSuccessBox}>
               <Text style={styles.claimedSuccessText}>
-                ✅ 친구 초대 코드가 등록되어 +20장 보상이 지급되었습니다.
+                친구 초대 코드가 등록되어 티켓 {TICKET_REWARD_REFERRAL}장이 지급되었습니다.
               </Text>
             </View>
           )}

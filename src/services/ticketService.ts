@@ -4,13 +4,32 @@ import auth from '@react-native-firebase/auth';
 import { sendLocalNotification, scheduleDailyAttendanceReminder } from './notificationService';
 import Toast from 'react-native-toast-message';
 
-// 🎟️ 티켓 소모 및 지급 기준 설정 (2단계 경제 구조 설계)
-export const TICKET_COST_FITTING = 10;      // AI 가상 피팅 1회 소모 티켓
-export const TICKET_REWARD_WELCOME = 20;    // 신규 가입/최초 접속 웰컴 보너스 티켓 (무료 2회분)
-export const TICKET_REWARD_ATTENDANCE = 3;  // 매일 출석체크 보너스 티켓
-export const TICKET_REWARD_AD = 3;          // 보상형 광고 1회 시청 보상 티켓
-export const TICKET_REWARD_POST = 2;        // 커뮤니티 코디 공유 업로드 보상 티켓
-export const TICKET_REWARD_REFERRAL = 20;   // 친구 초대 시 (초대자/가입자 모두) 보너스 티켓
+// 🎟️ 티켓 기준
+//
+// **티켓 1장 = 피팅 1회.** 이 규칙을 깨지 마세요.
+//
+// 예전에는 1회에 10장이 들고 보상은 "+3장"이라, 화면에 "보유 13장 (1회 -10장)",
+// "+20장 = 2회권" 같은 표기가 섞여 무슨 뜻인지 읽히지 않았습니다.
+// 광고를 4번 봐야 1회를 쓸 수 있었던 것도 이 구조 때문이었습니다.
+//
+// 값을 바꿀 때는 **서버의 `TICKET_COST_FITTING` 도 함께** 바꿔야 합니다.
+// 한쪽만 바꾸면 서버가 더 깎거나 덜 깎습니다.
+export const TICKET_COST_FITTING = 1;       // AI 가상 피팅 1회 = 티켓 1장
+export const TICKET_REWARD_WELCOME = 2;     // 신규 가입 (2회분)
+export const TICKET_REWARD_ATTENDANCE = 1;  // 매일 출석체크 (1회분)
+export const TICKET_REWARD_AD = 1;          // 보상형 광고 1회 시청 (1회분)
+export const TICKET_REWARD_POST = 1;        // 커뮤니티 코디 공유 (1회분)
+export const TICKET_REWARD_REFERRAL = 2;    // 친구 초대 (초대자·가입자 모두, 2회분)
+
+/**
+ * 티켓 단위가 바뀐 시점을 표시합니다.
+ *
+ * 예전 잔액은 "1회 = 10장" 단위였습니다. 그대로 두면 13장이 13회가 되어
+ * **기존 사용자 잔액이 10배로 불어납니다.** 처음 불러올 때 한 번 나눠 줍니다.
+ * 내림하면 있던 것을 빼앗는 셈이라 올림합니다 (13장 → 2회).
+ */
+const TICKET_SCALE_VERSION = 2;
+const LEGACY_TICKETS_PER_FITTING = 10;
 
 export type TicketReason =
   | 'WELCOME_BONUS'
@@ -24,6 +43,8 @@ export type TicketReason =
 interface TicketStorageData {
   balance: number;
   initialized: boolean;
+  /** 티켓 단위 버전. 없으면 구 단위(1회=10장)라 환산이 필요합니다. */
+  scaleVersion?: number;
   lastAttendanceDate?: string; // 'YYYY-MM-DD'
   hasClaimedReferral?: boolean;
 }
@@ -35,6 +56,22 @@ const DEV_BYPASS_EMAILS = ['sg97483@gmail.com'];
 export function isDevBypassUser(): boolean {
   const email = auth().currentUser?.email;
   return !!email && DEV_BYPASS_EMAILS.includes(email.toLowerCase());
+}
+
+/**
+ * 구 단위(1회=10장) 잔액을 새 단위(1회=1장)로 환산합니다.
+ * 이미 환산된 데이터는 그대로 돌려줍니다.
+ */
+function migrateTicketScale(data: TicketStorageData): TicketStorageData {
+  if (!data || data.scaleVersion === TICKET_SCALE_VERSION) {
+    return data;
+  }
+  const before = data.balance;
+  const after = Math.ceil((Number(before) || 0) / LEGACY_TICKETS_PER_FITTING);
+  console.log(
+    `🎟️ [TicketService] 티켓 단위 환산: ${before}장(구) → ${after}장(신, 1장=1회)`,
+  );
+  return { ...data, balance: after, scaleVersion: TICKET_SCALE_VERSION };
 }
 
 /**
@@ -58,6 +95,7 @@ async function loadTicketData(): Promise<TicketStorageData> {
             lastAttendanceDate: firestoreData.lastAttendanceDate,
             hasClaimedReferral: firestoreData.hasClaimedReferral || false,
           };
+          data = migrateTicketScale(data);
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           if (isDevBypassUser()) {
             data.balance = 9999;
@@ -74,18 +112,24 @@ async function loadTicketData(): Promise<TicketStorageData> {
       const initialData: TicketStorageData = {
         balance: isDevBypassUser() ? 9999 : TICKET_REWARD_WELCOME,
         initialized: true,
+        scaleVersion: TICKET_SCALE_VERSION,
       };
       await saveTicketData(initialData);
       return initialData;
     }
 
+    data = migrateTicketScale(data);
     if (isDevBypassUser()) {
       data.balance = 9999;
     }
     return data;
   } catch (error) {
     console.error('❌ [TicketService] loadTicketData 에러:', error);
-    return { balance: isDevBypassUser() ? 9999 : TICKET_REWARD_WELCOME, initialized: true };
+    return {
+      balance: isDevBypassUser() ? 9999 : TICKET_REWARD_WELCOME,
+      initialized: true,
+      scaleVersion: TICKET_SCALE_VERSION,
+    };
   }
 }
 
@@ -107,6 +151,7 @@ async function saveTicketData(data: TicketStorageData): Promise<void> {
               styleTickets: {
                 balance: data.balance,
                 initialized: data.initialized,
+                scaleVersion: TICKET_SCALE_VERSION,
                 lastAttendanceDate: data.lastAttendanceDate || null,
                 updatedAt: firestore.FieldValue.serverTimestamp(),
               },

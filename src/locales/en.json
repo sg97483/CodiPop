@@ -257,6 +257,10 @@
     "tooManyRequests": "Too many requests",
     "tooManyRequestsMessage": "Please try again in a moment.",
     "loginExpiredMessage": "Your session expired. Please sign in again.",
-    "loginRequired": "Sign-in required"
+    "loginRequired": "Sign-in required",
+    "sizeReasonBodyOnly": "Based on your height and weight (BMI {{bmi}}), we suggest {{recommendedSize}}.",
+    "sizeReasonBodyMatch": "Your usual size matches your measurements. We suggest {{recommendedSize}}.",
+    "sizeReasonBodySmaller": "Your measurements suggest {{recommendedSize}}. Since you usually wear {{usualSize}}, you may prefer a roomier fit.",
+    "sizeReasonBodyLarger": "Your measurements suggest {{recommendedSize}}. Since you usually wear {{usualSize}}, you may prefer a closer fit."
   }
 }

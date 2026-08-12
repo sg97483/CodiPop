@@ -257,6 +257,10 @@
     "tooManyRequests": "요청이 너무 많습니다",
     "tooManyRequestsMessage": "잠시 후 다시 시도해 주세요.",
     "loginExpiredMessage": "로그인이 만료되었습니다. 다시 로그인해 주세요.",
-    "loginRequired": "로그인이 필요합니다"
+    "loginRequired": "로그인이 필요합니다",
+    "sizeReasonBodyOnly": "키·몸무게 기준(BMI {{bmi}})으로 {{recommendedSize}}를 추천해요.",
+    "sizeReasonBodyMatch": "평소 사이즈와 체형 기준이 같아요. {{recommendedSize}}를 추천해요.",
+    "sizeReasonBodySmaller": "체형 기준으로는 {{recommendedSize}}예요. 평소 {{usualSize}}를 입으신다면 여유 있는 핏을 좋아하시는 편이에요.",
+    "sizeReasonBodyLarger": "체형 기준으로는 {{recommendedSize}}예요. 평소 {{usualSize}}를 입으신다면 붙는 핏을 좋아하시는 편이에요."
   }
 }
