@@ -24,7 +24,7 @@ const DetailScreen = () => {
   const onShare = async () => {
     try {
       await Share.share({
-        message: `CodiPOP 앱에서 생성한 새로운 스타일을 확인해보세요! ✨\n${imageUrl}`,
+        message: `코디팝에서 만든 스타일이에요.\n${imageUrl}`,
         url: imageUrl, // iOS에서는 url이 이미지와 함께 공유됩니다.
       });
     } catch (error: any) {

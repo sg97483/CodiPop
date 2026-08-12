@@ -65,6 +65,10 @@ import {
 } from '../services/ticketService';
 import { CodiPopLoadingAnimation } from '../components/CodiPopLoadingAnimation';
 import { CodiPopViralWatermark } from '../components/CodiPopViralWatermark';
+import { DownloadIcon } from '../components/icons/DownloadIcon';
+
+/** 강조색. 아이콘·글씨를 한곳에서 바꾸기 위해 상수로 둡니다. */
+const ACCENT = '#6A0DAD';
 
 /**
  * 앱 실행 1회를 식별하는 값.
@@ -1017,8 +1021,8 @@ const VirtualFittingScreen = () => {
     // 예전에는 한 줄에 워터마크·QR·초대코드·보너스까지 다 넣어 읽히지 않았습니다.
     // 선택지는 "무엇을 받는가" 만 남기고, 조건은 괄호 한 마디로 줄입니다.
     const options = [
-      '고화질로 저장 (광고 시청)',
-      '일반 저장',
+      '고화질 다운받기 (광고시청)',
+      '일반 다운받기',
       t('cancel'),
     ];
     const cancelButtonIndex = 2;
@@ -1037,7 +1041,7 @@ const VirtualFittingScreen = () => {
         if (selectedIndex === 0) {
           // 고화질 원본 저장 (광고 시청 후)
           Alert.alert(
-            '고화질로 저장',
+            '고화질 다운받기',
             '짧은 광고를 보시면 워터마크 없는 고화질 원본이 저장됩니다.',
             [
               { text: '취소', style: 'cancel' },
@@ -1246,6 +1250,7 @@ const VirtualFittingScreen = () => {
               onPress={handleDownloadImage}
               activeOpacity={0.8}
               style={styles.downloadButtonWrapper}>
+              <DownloadIcon size={20} color={ACCENT} strokeWidth={2} />
               <Text style={styles.downloadButtonText}>저장</Text>
             </TouchableOpacity>
           </>
@@ -1668,6 +1673,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 12,
     shadowColor: 'transparent',

@@ -32,6 +32,8 @@ import Toast from 'react-native-toast-message';
 import { check, request, PERMISSIONS, RESULTS, openSettings, Permission } from 'react-native-permissions';
 import { captureRef } from 'react-native-view-shot';
 import { useTranslation } from 'react-i18next';
+import { DownloadIcon } from '../components/icons/DownloadIcon';
+import { TICKET_REWARD_REFERRAL } from '../services/ticketService';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import { AdEventType, RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
 import ProductInfoModal from '../components/ProductInfoModal';
@@ -333,8 +335,8 @@ const CodiDetailScreen = () => {
           await CameraRoll.save(uri, { type: 'photo' });
           Toast.show({
             type: 'success',
-            text1: '🎁 바이럴 워터마크(QR+초대코드) 포함 저장 완료 📸',
-            text2: 'SNS 공유하고 친구 초대하여 무료 티켓 20장 받아보세요! ✨',
+            text1: '갤러리에 저장했어요',
+            text2: `SNS 에 공유하면 친구 초대 보상 티켓 ${TICKET_REWARD_REFERRAL}장을 받을 수 있어요`,
           });
           setLoading(false);
           return;
@@ -396,9 +398,10 @@ const CodiDetailScreen = () => {
   const handleDownload = async () => {
     if (!imageUrl) return;
 
+    // 문구 최소화 + 컬러 이모지 제거 (기획 요청 0812). 피팅 화면과 같은 표현을 씁니다.
     const options = [
-      '✨ 워터마크 없는 HD 고화질 원본 저장 (광고 1회 시청)',
-      '🎁 바이럴 워터마크(QR+초대코드) 포함 저장 (SNS 공유 시 +20장 보너스!)',
+      '고화질 다운받기 (광고시청)',
+      '일반 다운받기',
       t('cancel'),
     ];
     const cancelButtonIndex = 2;
@@ -407,8 +410,7 @@ const CodiDetailScreen = () => {
       {
         options,
         cancelButtonIndex,
-        title: '이미지 저장 옵션 선택',
-        message: '고해상도 HD 원본으로 저장하시려면 짧은 광고를 시청해 주세요.',
+        title: '저장 방식 선택',
       },
       async (selectedIndex?: number) => {
         if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) {
@@ -416,20 +418,19 @@ const CodiDetailScreen = () => {
         }
 
         if (selectedIndex === 0) {
-          // ✨ HD 고화질 원본 저장 (광고 시청 후 저장)
           Alert.alert(
-            'HD 고화질 다운로드 ✨',
-            '짧은 보상형 광고를 시청하시면 워터마크 없는 고해상도(HD) 원본 이미지가 갤러리에 저장됩니다.',
+            '고화질 다운받기',
+            '짧은 광고를 보시면 워터마크 없는 고화질 원본이 저장됩니다.',
             [
               { text: '취소', style: 'cancel' },
               {
-                text: '광고 보고 HD 저장 🎥',
+                text: '광고 보고 저장',
                 onPress: () => showRewardAd(),
               },
             ],
           );
         } else if (selectedIndex === 1) {
-          // 🖼️ 일반 화질 (워터마크 포함) 저장
+          // 일반 저장 — 코디팝 워터마크(QR·초대코드)가 함께 들어갑니다.
           await processDownloadImage(true);
         }
       },
@@ -725,7 +726,7 @@ const CodiDetailScreen = () => {
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <>
-                      <Text style={styles.downloadIcon}>📥</Text>
+                      <DownloadIcon size={20} color="#6A0DAD" strokeWidth={2} />
                       <Text style={styles.downloadButtonText}>{t('download')}</Text>
                     </>
                   )}

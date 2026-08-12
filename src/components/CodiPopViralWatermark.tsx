@@ -49,11 +49,11 @@ export const CodiPopViralWatermark: React.FC<CodiPopViralWatermarkProps> = ({
           <Text style={styles.brandTitle}>CodiPop AI</Text>
         </View>
 
-        <Text style={styles.tagline}>✨ AI가 제안하는 나만의 트렌디 가상 피팅</Text>
+        <Text style={styles.tagline}>AI 가상 피팅</Text>
 
         <View style={styles.referralBox}>
           <Text style={styles.referralText}>
-            🎁 초대코드 <Text style={styles.codeHighlight}>[ {referralCode} ]</Text> 입력 시 무료 티켓 +20장!
+            초대코드 <Text style={styles.codeHighlight}>{referralCode}</Text> 입력 시 무료 티켓 증정
           </Text>
         </View>
       </View>

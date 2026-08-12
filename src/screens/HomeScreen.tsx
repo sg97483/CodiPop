@@ -90,7 +90,7 @@ const HomeScreen = () => {
       checkAndClaimDailyAttendance().then(result => {
         if (result.claimed) {
           Alert.alert(
-            '🎁 오늘의 출석체크 보너스!',
+            '오늘의 출석 보너스',
             `매일 첫 접속 보너스로 스타일 티켓 +${result.rewardAmount}장이 지급되었습니다!\n(현재 잔액: ${result.balance}장)`,
             [{ text: '확인' }],
           );

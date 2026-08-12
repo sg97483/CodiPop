@@ -254,10 +254,10 @@ const ProfileScreen = () => {
           </Text>
         </View>
 
-        {/* ⚡ 친구 초대 및 보너스 티켓 섹션 (전략 D) */}
+        {/* 친구 초대 및 보너스 티켓 섹션 */}
         <View style={styles.referralContainer}>
           <View style={styles.referralHeader}>
-            <Text style={styles.referralTitle}>⚡ 친구 초대하고 티켓 20장 받기</Text>
+            <Text style={styles.referralTitle}>친구 초대하고 티켓 {TICKET_REWARD_REFERRAL}장 받기</Text>
             <Text style={styles.referralDesc}>
               친구와 내가 모두 피팅 2회권(+20장)을 받아요!
             </Text>
