@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import qrcode from 'qrcode-generator';
+import { buildInviteUrl } from '../constants/appLinks';
 
 interface CodiPopViralWatermarkProps {
   referralCode?: string;
@@ -14,7 +15,7 @@ export const CodiPopViralWatermark: React.FC<CodiPopViralWatermarkProps> = ({
 }) => {
   const qrMatrix = useMemo(() => {
     try {
-      const url = `https://codipop.app/invite?code=${referralCode}`;
+      const url = buildInviteUrl(referralCode);
       const qr = qrcode(4, 'L');
       qr.addData(url);
       qr.make();
