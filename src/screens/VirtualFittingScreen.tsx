@@ -65,10 +65,14 @@ import {
 } from '../services/ticketService';
 import { CodiPopLoadingAnimation } from '../components/CodiPopLoadingAnimation';
 import { CodiPopViralWatermark } from '../components/CodiPopViralWatermark';
-import { DownloadIcon } from '../components/icons/DownloadIcon';
+import {
+  DownloadIcon,
+  ShareIcon,
+  RefreshIcon,
+} from '../components/icons';
+import { CircleIconButton } from '../components/CircleIconButton';
+import { buildInviteUrl } from '../constants/appLinks';
 
-/** 강조색. 아이콘·글씨를 한곳에서 바꾸기 위해 상수로 둡니다. */
-const ACCENT = '#6A0DAD';
 
 /**
  * 앱 실행 1회를 식별하는 값.
@@ -1006,6 +1010,47 @@ const VirtualFittingScreen = () => {
     }
   };
 
+  /**
+   * 결과를 링크로 공유합니다. '저장'과 다른 동작입니다 —
+   * 저장은 갤러리에 넣고, 공유는 초대 링크를 함께 보내 사람을 데려옵니다.
+   * 초대 링크에는 내 추천 코드가 들어가 있어 가입 시 양쪽이 티켓을 받습니다.
+   */
+  const handleShareImage = async () => {
+    if (!resultImage) {
+      return;
+    }
+    try {
+      await Share.share({
+        message: [
+          '코디팝으로 입어봤어요',
+          resultImage,
+          userReferralCode ? buildInviteUrl(userReferralCode) : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      });
+    } catch (error) {
+      // 사용자가 공유 시트를 닫은 경우도 여기로 옵니다. 알릴 것이 없습니다.
+      console.log('공유 취소 또는 실패:', error);
+    }
+  };
+
+  /** 내 사진 썸네일을 누르면 뜨는 메뉴. 구글 쇼핑의 '기존 사진 바꾸기 / 삭제'와 같습니다. */
+  const handlePersonMenu = () => {
+    const options = ['다른 사진으로 바꾸기', '사진 삭제', t('cancel')];
+    showActionSheetWithOptions(
+      { options, cancelButtonIndex: 2, destructiveButtonIndex: 1 },
+      (selectedIndex?: number) => {
+        if (selectedIndex === 0) {
+          handleSelectPerson();
+        } else if (selectedIndex === 1) {
+          setPersonImage(null);
+          setResultImage(null);
+        }
+      },
+    );
+  };
+
   // 결과 이미지 다운로드/공유 버튼 클릭 시 호출되는 함수 (ActionSheet로 화질 선택)
   const handleDownloadImage = async () => {
     if (!resultImage) {
@@ -1218,42 +1263,46 @@ const VirtualFittingScreen = () => {
           </TouchableOpacity>
         )}
 
-        {/* 사람 변경 버튼 - 합성 결과가 아닐 때만 표시 */}
-        {!resultImage && (
+        {/* 내 사진 — 구글 쇼핑처럼 우상단에 동그란 썸네일로 둡니다.
+            "사람 변경"이라는 글씨 박스를 놓는 것보다,
+            **지금 어떤 사진으로 입어보는 중인지**가 한눈에 보입니다. */}
+        {personImage ? (
           <TouchableOpacity
-            style={styles.changePersonButton}
-            onPress={handleSelectPerson}>
-            <Text style={styles.changePersonText}>사람 변경</Text>
+            style={styles.personThumbWrapper}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="내 사진 변경"
+            onPress={handlePersonMenu}>
+            <Image source={{ uri: personImage }} style={styles.personThumb} />
           </TouchableOpacity>
-        )}
+        ) : null}
 
-        {/* 피팅 버튼들 */}
+        {/* 결과 화면의 조작 버튼 — 구글 쇼핑 가상 피팅의 배치를 따릅니다.
+            사진이 주인공이므로 글씨 박스 대신 **오른쪽에 원형 아이콘만** 세로로 둡니다.
+            같은 기능을 훨씬 작은 면적으로 놓을 수 있어 사진이 가려지지 않습니다. */}
         {resultImage ? (
-          <>
-            <TouchableOpacity
-              style={styles.changePersonButton}
+          <View style={styles.resultActions}>
+            <CircleIconButton label="공유하기" onPress={handleShareImage}>
+              <ShareIcon size={22} />
+            </CircleIconButton>
+            <CircleIconButton label="갤러리에 저장" onPress={handleDownloadImage}>
+              <DownloadIcon size={22} />
+            </CircleIconButton>
+            <CircleIconButton
+              label="다시 입어보기"
               onPress={() => {
                 setResultImage(null);
-                // setPersonImage(null); // ❌ 기존 사람 이미지 유지
                 setSelectedClothingImages([]);
-                // slideUpAnim.setValue(0); // 패널 애니메이션 초기화 불필요 (사람 이미지가 있으므로)
-                setIsPanelExpanded(true); // 옷장 패널 다시 열기
+                setIsPanelExpanded(true);
                 RNAnimated.timing(slideUpAnim, {
                   toValue: 1,
                   duration: 300,
                   useNativeDriver: true,
                 }).start();
               }}>
-              <Text style={styles.changePersonText}>다시 입어보기</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleDownloadImage}
-              activeOpacity={0.8}
-              style={styles.downloadButtonWrapper}>
-              <DownloadIcon size={20} color={ACCENT} strokeWidth={2} />
-              <Text style={styles.downloadButtonText}>저장</Text>
-            </TouchableOpacity>
-          </>
+              <RefreshIcon size={22} />
+            </CircleIconButton>
+          </View>
         ) : (
           <TouchableOpacity
             onPress={handleTryOn}
@@ -1525,6 +1574,35 @@ const styles = StyleSheet.create({
   fittingCountNumberDev: {
     color: '#6A0DAD',
   },
+  personThumbWrapper: {
+    position: 'absolute',
+    top: 10,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    backgroundColor: '#EEE',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  personThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  // 결과 화면 오른쪽에 세로로 놓이는 원형 버튼 묶음
+  resultActions: {
+    position: 'absolute',
+    right: 16,
+    bottom: 24,
+    gap: 12,
+    alignItems: 'center',
+  },
   ticketUnitHint: {
     fontSize: 11,
     color: '#6A0DAD',
@@ -1592,29 +1670,6 @@ const styles = StyleSheet.create({
     color: 'gray',
     fontWeight: 'bold',
   },
-  changePersonButton: {
-    position: 'absolute',
-    top: 10,
-    left: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  changePersonText: {
-    color: '#333',
-    fontWeight: '700',
-    fontSize: 15,
-    letterSpacing: -0.3,
-  },
   tryOnButtonContainer: {
     position: 'absolute',
     top: 10,
@@ -1661,36 +1716,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 4,
     width: '100%',
-  },
-  downloadButtonText: {
-    // 박스 대신 글씨 색만으로 구분합니다 (기획 요청).
-    color: '#6A0DAD',
-    fontWeight: '700',
-    fontSize: 15,
-    letterSpacing: -0.3,
-  },
-  downloadButtonWrapper: {
-    position: 'absolute',
-    top: 10,
-    right: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 6,
-  },
-  downloadButtonGradient: {
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   // 하단 옷장 패널
   closetPanel: {

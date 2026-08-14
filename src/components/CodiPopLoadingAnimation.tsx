@@ -146,11 +146,24 @@ export const CodiPopLoadingAnimation: React.FC = () => {
         {LOADING_STEPS[stepIndex]}
       </Animated.Text>
       <Text style={styles.subStatusText}>보통 10초 안에 끝나요</Text>
+      {/* AI 결과의 한계를 미리 알립니다. 구글 쇼핑 가상 피팅도 같은 고지를 답니다 —
+          구매 판단에 쓰이는 이미지라, 기대치를 먼저 맞춰야 실망과 반품이 줄어듭니다. */}
+      <Text style={styles.disclaimerText}>
+        AI 생성 이미지라 실제 착용감이나 색상과 다를 수 있어요
+      </Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  disclaimerText: {
+    marginTop: 14,
+    paddingHorizontal: 32,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#9A93A6',
+    textAlign: 'center',
+  },
   container: {
     alignItems: 'center',
     justifyContent: 'center',
