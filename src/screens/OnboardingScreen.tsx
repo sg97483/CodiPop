@@ -8,7 +8,6 @@ import {
   FlatList,
   TouchableOpacity,
   Dimensions,
-  Image,
   StatusBar,
   LayoutChangeEvent,
 } from 'react-native';
@@ -16,11 +15,20 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useTranslation} from 'react-i18next';
 import {RootStackParamList} from '../../App';
+import PhoneFrame, {FRAME_W, FRAME_H} from '../components/onboarding/PhoneFrame';
+import {
+  FittingScene,
+  ClosetScene,
+  MallScene,
+  CommunityScene,
+  CodiBookScene,
+} from '../components/onboarding/scenes';
 
 const {width: WINDOW_WIDTH} = Dimensions.get('window');
 
@@ -29,11 +37,21 @@ type OnboardingScreenNavigationProp = NativeStackNavigationProp<
   'Onboarding'
 >;
 
+/**
+ * 슬라이드 한 장의 정의.
+ *
+ * **그림은 이미지가 아니라 컴포넌트입니다.** 예전에는 실기기 스크린샷 PNG 5장이었는데,
+ * 앱 화면을 고쳐도 온보딩은 그대로 남아 **신규 사용자가 온보딩에서 본 화면이 앱에 없는**
+ * 상태가 실제로 생겼습니다(결과 화면을 원형 아이콘으로 바꾼 뒤).
+ * 지금은 같은 부품을 코드로 그리므로 UI 를 고칠 때 온보딩도 같이 눈에 들어옵니다.
+ */
 interface OnboardingData {
   id: number;
   titleKey: string;
   descriptionKey: string;
-  image: any;
+  Scene: React.FC;
+  /** 슬라이드마다 배경색을 달리해 넘길 때 '진행되고 있다'는 느낌을 줍니다. */
+  bg: [string, string];
 }
 
 const onboardingData: OnboardingData[] = [
@@ -41,31 +59,36 @@ const onboardingData: OnboardingData[] = [
     id: 1,
     titleKey: 'onboarding1Title',
     descriptionKey: 'onboarding1Description',
-    image: require('../assets/images/onboarding/screen1.png'),
+    Scene: FittingScene,
+    bg: ['#FFE9F1', '#F1E7FF'],
   },
   {
     id: 2,
     titleKey: 'onboarding2Title',
     descriptionKey: 'onboarding2Description',
-    image: require('../assets/images/onboarding/screen2.png'),
+    Scene: ClosetScene,
+    bg: ['#EFEAFF', '#E6F0FF'],
   },
   {
     id: 3,
     titleKey: 'onboardingMallTitle',
     descriptionKey: 'onboardingMallDescription',
-    image: require('../assets/images/onboarding/screen4_mall_v2.png'),
+    Scene: MallScene,
+    bg: ['#E4F1FF', '#EAE6FF'],
   },
   {
     id: 4,
     titleKey: 'onboardingCommunityTitle',
     descriptionKey: 'onboardingCommunityDescription',
-    image: require('../assets/images/onboarding/screen5_community_v2.png'),
+    Scene: CommunityScene,
+    bg: ['#FFEDE6', '#F6E8FF'],
   },
   {
     id: 5,
     titleKey: 'onboarding3Title',
     descriptionKey: 'onboarding3Description',
-    image: require('../assets/images/onboarding/screen3.png'),
+    Scene: CodiBookScene,
+    bg: ['#F3E8FF', '#FFE6F2'],
   },
 ];
 
@@ -79,6 +102,17 @@ const OnboardingScreen = () => {
   const insets = useSafeAreaInsets();
 
   const current = onboardingData[currentIndex];
+
+  /**
+   * 폰 목업을 남는 공간에 맞춥니다.
+   *
+   * 목업 안쪽은 고정 좌표로 짜여 있습니다(PhoneFrame 주석 참고).
+   * 여기서 **배율 하나만** 정하면 작은 폰에서도 그림이 무너지지 않고 줄어듭니다.
+   * 여백을 조금 남겨 프레임 그림자가 잘리지 않게 합니다.
+   */
+  const scale = imageAreaHeight
+    ? Math.min((pageWidth - 56) / FRAME_W, (imageAreaHeight - 32) / FRAME_H, 1)
+    : 0;
 
   const handleOnboardingDone = async () => {
     try {
@@ -119,11 +153,9 @@ const OnboardingScreen = () => {
         styles.slide,
         {width: pageWidth, height: imageAreaHeight || undefined},
       ]}>
-      <Image
-        source={item.image}
-        style={styles.onboardingImage}
-        resizeMode="contain"
-      />
+      <PhoneFrame scale={scale}>
+        <item.Scene />
+      </PhoneFrame>
     </View>
   );
 
@@ -131,7 +163,16 @@ const OnboardingScreen = () => {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" />
 
-      {/* 이미지만 스크롤 영역 */}
+      {/* 배경은 슬라이드를 따라 바뀝니다. 목업 자체가 흰 화면이라
+          배경까지 흰색이면 폰이 배경에 묻혀 보이지 않습니다. */}
+      <LinearGradient
+        colors={current.bg}
+        start={{x: 0, y: 0}}
+        end={{x: 1, y: 1}}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* 그림만 스크롤되는 영역 */}
       <View style={styles.imageArea} onLayout={onListLayout}>
         {imageAreaHeight > 0 && (
           <FlatList
@@ -181,12 +222,21 @@ const OnboardingScreen = () => {
           <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
             <Text style={styles.skipButtonText}>{t('skip')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-            <Text style={styles.nextButtonText}>
-              {currentIndex === onboardingData.length - 1
-                ? t('getStarted')
-                : t('continueButton')}
-            </Text>
+          <TouchableOpacity
+            style={styles.nextButton}
+            onPress={handleNext}
+            activeOpacity={0.85}>
+            <LinearGradient
+              colors={['#FF6B9D', '#8B5CF6']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 0}}
+              style={styles.nextButtonFill}>
+              <Text style={styles.nextButtonText}>
+                {currentIndex === onboardingData.length - 1
+                  ? t('getStarted')
+                  : t('continueButton')}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
@@ -197,7 +247,7 @@ const OnboardingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F5F2FA',
   },
   imageArea: {
     flex: 1,
@@ -207,15 +257,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  onboardingImage: {
-    width: '100%',
-    height: '100%',
   },
   bottomArea: {
-    backgroundColor: '#F5F5F5',
     paddingTop: 4,
   },
   textContainer: {
@@ -227,14 +270,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#333333',
+    color: '#241B33',
     textAlign: 'center',
     marginBottom: 6,
     lineHeight: 30,
   },
   description: {
     fontSize: 14,
-    color: '#666666',
+    color: '#6B6478',
     textAlign: 'center',
     lineHeight: 20,
     fontWeight: '400',
@@ -249,11 +292,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#CCCCCC',
+    backgroundColor: 'rgba(106, 13, 173, 0.22)',
     marginHorizontal: 5,
   },
   paginationDotActive: {
-    backgroundColor: '#6A0DAD',
+    backgroundColor: '#7C3AED',
     width: 28,
   },
   buttonContainer: {
@@ -264,7 +307,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     marginRight: 10,
-    backgroundColor: '#EDE7F6',
+    backgroundColor: 'rgba(255,255,255,0.72)',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -276,17 +319,19 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     flex: 1,
-    paddingVertical: 14,
     marginLeft: 10,
-    backgroundColor: '#6A0DAD',
     borderRadius: 12,
+    overflow: 'hidden',
+  },
+  nextButtonFill: {
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   nextButtonText: {
     fontSize: 16,
     color: '#ffffff',
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
 
