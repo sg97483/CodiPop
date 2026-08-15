@@ -12,7 +12,6 @@ import {
   Dimensions,
   StatusBar,
   InteractionManager,
-  Share,
   ScrollView,
   Platform,
   Linking,
@@ -77,6 +76,8 @@ const CodiDetailScreen = () => {
   const route = useRoute<CodiDetailScreenRouteProp>();
   const user = auth().currentUser;
   const insets = useSafeAreaInsets();
+  // 홍보 기간 동안 저장 화질 선택창을 끄면서 잠시 쓰이지 않습니다 (handleDownload 참고).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { showActionSheetWithOptions } = useActionSheet();
 
   const [adLoaded, setAdLoaded] = useState(false);
@@ -112,6 +113,8 @@ const CodiDetailScreen = () => {
     };
   }, []);
 
+  // 위와 같은 이유로 잠시 호출되는 곳이 없습니다. 광고를 다시 켜면 바로 쓰입니다.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const showRewardAd = () => {
     if (adLoaded) {
       rewarded.show();
@@ -351,15 +354,10 @@ const CodiDetailScreen = () => {
       localFile = `${RNFS.CachesDirectoryPath}/${Date.now()}_codi_hd.jpeg`;
       await RNFS.downloadFile({ fromUrl: imageUrl, toFile: localFile }).promise;
 
-      if (Platform.OS === 'ios') {
-        await Share.share({
-          url: `file://${localFile}`,
-        });
-        Toast.show({ type: 'success', text1: t('imageShared') });
-      } else {
-        await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
-        Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
-      }
+      // 피팅 화면과 동일 — **두 플랫폼 모두 갤러리 직행**입니다.
+      // '저장'을 눌렀는데 공유 시트가 뜨면, 닫는 순간 아무것도 남지 않습니다.
+      await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
+      Toast.show({ type: 'success', text1: t('imageSavedToGallery') });
     } catch (error: any) {
       console.error('❌ [다운로드] 전체 프로세스 실패:', error);
       setIsCapturing(false);
@@ -394,11 +392,20 @@ const CodiDetailScreen = () => {
     }
   };
 
-  // 이미지 다운로드 클릭 시 ActionSheet로 화질 옵션 선택
+  /**
+   * 이미지 저장 버튼.
+   *
+   * **[출시 홍보 기간] 광고 게이트를 잠시 껐습니다.** 피팅 화면과 동작을 맞춥니다 —
+   * 누르면 바로 **워터마크 없는 고화질 원본**이 저장됩니다.
+   * 다시 켤 때는 아래 주석 블록을 되살리고 직접 저장 호출을 지우면 됩니다.
+   */
   const handleDownload = async () => {
     if (!imageUrl) return;
 
-    // 문구 최소화 + 컬러 이모지 제거 (기획 요청 0812). 피팅 화면과 같은 표현을 씁니다.
+    // 워터마크 없는 고화질 원본 — 예전에 광고를 봐야 받던 것과 같습니다.
+    await processDownloadImage(false);
+
+    /* ── 광고 게이트 (출시 홍보 기간 동안 비활성) ──────────────────────
     const options = [
       '고화질 다운받기 (광고시청)',
       '일반 다운받기',
@@ -435,6 +442,7 @@ const CodiDetailScreen = () => {
         }
       },
     );
+    ────────────────────────────────────────────────────────────── */
   };
 
   const handleDelete = () => {

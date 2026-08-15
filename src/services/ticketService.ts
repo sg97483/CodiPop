@@ -14,12 +14,17 @@ import Toast from 'react-native-toast-message';
 //
 // 값을 바꿀 때는 **서버의 `TICKET_COST_FITTING` 도 함께** 바꿔야 합니다.
 // 한쪽만 바꾸면 서버가 더 깎거나 덜 깎습니다.
-export const TICKET_COST_FITTING = 1;       // AI 가상 피팅 1회 = 티켓 1장
-export const TICKET_REWARD_WELCOME = 2;     // 신규 가입 (2회분)
-export const TICKET_REWARD_ATTENDANCE = 1;  // 매일 출석체크 (1회분)
-export const TICKET_REWARD_AD = 1;          // 보상형 광고 1회 시청 (1회분)
-export const TICKET_REWARD_POST = 1;        // 커뮤니티 코디 공유 (1회분)
-export const TICKET_REWARD_REFERRAL = 2;    // 친구 초대 (초대자·가입자 모두, 2회분)
+//
+// **[출시 홍보 기간] 지급량을 5배로 올렸습니다.**
+// 1회 비용(TICKET_COST_FITTING)은 1장 그대로 두고 **버는 쪽만** 5배로 만듭니다.
+// 비용을 건드리면 서버와 어긋나고(위 주석), 화면의 "1회 1장" 표기도 전부 깨집니다.
+// 홍보를 끝낼 때는 아래 5배 값을 괄호 안 원래 값으로 되돌리면 됩니다.
+export const TICKET_COST_FITTING = 1;        // AI 가상 피팅 1회 = 티켓 1장 (서버와 동일해야 함)
+export const TICKET_REWARD_WELCOME = 10;     // 신규 가입 (10회분, 홍보 5배 / 원래 2)
+export const TICKET_REWARD_ATTENDANCE = 5;   // 매일 출석체크 (5회분, 홍보 5배 / 원래 1)
+export const TICKET_REWARD_AD = 5;           // 보상형 광고 1회 시청 (5회분, 홍보 5배 / 원래 1)
+export const TICKET_REWARD_POST = 5;         // 커뮤니티 코디 공유 (5회분, 홍보 5배 / 원래 1)
+export const TICKET_REWARD_REFERRAL = 10;    // 친구 초대 (초대자·가입자 모두, 10회분, 홍보 5배 / 원래 2)
 
 /**
  * 티켓 단위가 바뀐 시점을 표시합니다.
@@ -30,6 +35,19 @@ export const TICKET_REWARD_REFERRAL = 2;    // 친구 초대 (초대자·가입�
  */
 const TICKET_SCALE_VERSION = 2;
 const LEGACY_TICKETS_PER_FITTING = 10;
+
+/**
+ * 출시 홍보용 5배 지급을 **이미 앱을 쓰고 있던 사람에게도** 한 번 적용합니다.
+ *
+ * 위의 TICKET_REWARD_* 를 5배로 올린 것만으로는 앞으로 받을 것만 늘어나고,
+ * 지금 2장을 들고 있는 사람은 다음 출석까지 그대로 2장입니다.
+ * 그래서 남아 있는 잔액도 한 번 5배로 올려 줍니다.
+ *
+ * **버전 번호를 저장해 두 번 적용되지 않게 합니다.** 저장이 빠지면
+ * 앱을 켤 때마다 5배가 되어 잔액이 폭주합니다.
+ */
+const PROMO_BOOST_VERSION = 1;
+const PROMO_BOOST_MULTIPLIER = 5;
 
 export type TicketReason =
   | 'WELCOME_BONUS'
@@ -45,6 +63,8 @@ interface TicketStorageData {
   initialized: boolean;
   /** 티켓 단위 버전. 없으면 구 단위(1회=10장)라 환산이 필요합니다. */
   scaleVersion?: number;
+  /** 홍보 5배 지급을 받은 버전. 없으면 아직 못 받은 잔액입니다. */
+  promoBoostVersion?: number;
   lastAttendanceDate?: string; // 'YYYY-MM-DD'
   hasClaimedReferral?: boolean;
 }
@@ -75,6 +95,40 @@ function migrateTicketScale(data: TicketStorageData): TicketStorageData {
 }
 
 /**
+ * 남아 있는 잔액에 홍보 5배를 한 번만 적용합니다.
+ * 이미 받은 데이터는 그대로 돌려줍니다.
+ */
+function applyPromoBoost(data: TicketStorageData): TicketStorageData {
+  if (!data || data.promoBoostVersion === PROMO_BOOST_VERSION) {
+    return data;
+  }
+  const before = Number(data.balance) || 0;
+  const after = before * PROMO_BOOST_MULTIPLIER;
+  console.log(
+    `🎁 [TicketService] 출시 홍보 ${PROMO_BOOST_MULTIPLIER}배 지급: ${before}장 → ${after}장`,
+  );
+  return { ...data, balance: after, promoBoostVersion: PROMO_BOOST_VERSION };
+}
+
+/**
+ * 저장된 데이터를 현재 규칙에 맞춥니다 (단위 환산 + 홍보 5배 지급).
+ *
+ * 바뀐 게 있으면 **그 자리에서 저장합니다.** 저장을 미루면 다음 실행에서
+ * 같은 환산·지급이 또 일어나 잔액이 계속 깎이거나 불어납니다.
+ */
+async function normalizeTicketData(data: TicketStorageData): Promise<TicketStorageData> {
+  const next = applyPromoBoost(migrateTicketScale(data));
+  const changed =
+    next.balance !== data.balance ||
+    next.scaleVersion !== data.scaleVersion ||
+    next.promoBoostVersion !== data.promoBoostVersion;
+  if (changed) {
+    await saveTicketData(next);
+  }
+  return next;
+}
+
+/**
  * 로컬 및 Firestore 데이터 싱크 및 로딩
  */
 async function loadTicketData(): Promise<TicketStorageData> {
@@ -92,10 +146,14 @@ async function loadTicketData(): Promise<TicketStorageData> {
           data = {
             balance: typeof firestoreData.balance === 'number' ? firestoreData.balance : TICKET_REWARD_WELCOME,
             initialized: firestoreData.initialized || true,
+            // 서버에 남아 있는 버전을 그대로 가져옵니다. 빠뜨리면 이미 환산·지급이
+            // 끝난 잔액을 **다시 한 번** 환산하거나 5배로 만듭니다.
+            scaleVersion: firestoreData.scaleVersion,
+            promoBoostVersion: firestoreData.promoBoostVersion,
             lastAttendanceDate: firestoreData.lastAttendanceDate,
             hasClaimedReferral: firestoreData.hasClaimedReferral || false,
           };
-          data = migrateTicketScale(data);
+          data = await normalizeTicketData(data);
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           if (isDevBypassUser()) {
             data.balance = 9999;
@@ -113,12 +171,14 @@ async function loadTicketData(): Promise<TicketStorageData> {
         balance: isDevBypassUser() ? 9999 : TICKET_REWARD_WELCOME,
         initialized: true,
         scaleVersion: TICKET_SCALE_VERSION,
+        // 웰컴 보너스는 이미 5배로 지급되므로 추가 지급 대상이 아닙니다.
+        promoBoostVersion: PROMO_BOOST_VERSION,
       };
       await saveTicketData(initialData);
       return initialData;
     }
 
-    data = migrateTicketScale(data);
+    data = await normalizeTicketData(data);
     if (isDevBypassUser()) {
       data.balance = 9999;
     }
@@ -129,6 +189,7 @@ async function loadTicketData(): Promise<TicketStorageData> {
       balance: isDevBypassUser() ? 9999 : TICKET_REWARD_WELCOME,
       initialized: true,
       scaleVersion: TICKET_SCALE_VERSION,
+      promoBoostVersion: PROMO_BOOST_VERSION,
     };
   }
 }
@@ -152,6 +213,8 @@ async function saveTicketData(data: TicketStorageData): Promise<void> {
                 balance: data.balance,
                 initialized: data.initialized,
                 scaleVersion: TICKET_SCALE_VERSION,
+                // 기기를 바꾸거나 재설치해도 5배를 또 받지 않도록 서버에도 남깁니다.
+                promoBoostVersion: data.promoBoostVersion ?? null,
                 lastAttendanceDate: data.lastAttendanceDate || null,
                 updatedAt: firestore.FieldValue.serverTimestamp(),
               },

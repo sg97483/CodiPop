@@ -961,22 +961,16 @@ const VirtualFittingScreen = () => {
       localFile = `${RNFS.CachesDirectoryPath}/${Date.now()}_result.jpeg`;
       await RNFS.downloadFile({ fromUrl: resultImage, toFile: localFile }).promise;
 
-      if (Platform.OS === 'ios') {
-        await Share.share({
-          url: `file://${localFile}`,
-        });
-        Toast.show({
-          type: 'success',
-          text1: isWatermarked ? t('imageShared') : '고화질 원본을 저장·공유했어요',
-        });
-      } else {
-        // Android에서는 갤러리 저장 수행
-        await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
-        Toast.show({
-          type: 'success',
-          text1: isWatermarked ? t('imageSavedToGallery') : '고화질 원본을 갤러리에 저장했어요',
-        });
-      }
+      // **두 플랫폼 모두 갤러리에 바로 넣습니다.**
+      // 예전에는 iOS 만 공유 시트를 띄웠는데, '저장'을 눌렀는데 공유창이 뜨면
+      // 어디에 저장됐는지 알 수 없고 시트를 닫으면 아무것도 남지 않습니다.
+      // 공유는 옆의 '공유' 버튼이 따로 합니다.
+      // iOS 권한(PHOTO_LIBRARY_ADD_ONLY)은 호출 전에 이미 받아 둡니다.
+      await CameraRoll.save(`file://${localFile}`, { type: 'photo' });
+      Toast.show({
+        type: 'success',
+        text1: isWatermarked ? t('imageSavedToGallery') : '고화질 원본을 갤러리에 저장했어요',
+      });
     } catch (error: any) {
       console.error('저장 실패:', error);
       if (error?.message?.includes('permission') || error?.code === 'E_PERMISSION_MISSING' || error?.code === 'E_PERMISSION_DENIED') {
@@ -1068,7 +1062,20 @@ const VirtualFittingScreen = () => {
     );
   };
 
-  // 결과 이미지 다운로드/공유 버튼 클릭 시 호출되는 함수 (ActionSheet로 화질 선택)
+  /**
+   * 결과 이미지 저장 버튼.
+   *
+   * **[출시 홍보 기간] 광고 게이트를 잠시 껐습니다.** 누르면 바로 저장됩니다.
+   * 앱을 막 출시한 지금은 "저장 한 번에 광고 한 편"이 첫인상을 깎습니다.
+   *
+   * 저장되는 것은 **광고 뒤에 있던 것과 같은 워터마크 없는 고화질 원본**입니다.
+   * 사진 아래 QR·초대코드 배너가 붙은 쪽은 '일반 다운받기'였는데,
+   * 사람들이 밖에 내보이는 것은 결국 깨끗한 사진입니다 —
+   * 배너 때문에 아예 공유하지 않으면 홍보도 같이 사라집니다.
+   *
+   * 광고를 다시 켤 때는 아래 주석 블록을 되살리고 직접 저장 호출을 지우면 됩니다.
+   * 워터마크 저장 경로(`processDownloadImage(true)`)도 그대로 살아 있습니다.
+   */
   const handleDownloadImage = async () => {
     if (!resultImage) {
       return;
@@ -1079,9 +1086,10 @@ const VirtualFittingScreen = () => {
       return;
     }
 
-    // 문구를 최소화합니다 (기획 요청).
-    // 예전에는 한 줄에 워터마크·QR·초대코드·보너스까지 다 넣어 읽히지 않았습니다.
-    // 선택지는 "무엇을 받는가" 만 남기고, 조건은 괄호 한 마디로 줄입니다.
+    // 워터마크 없는 고화질 원본 — 예전에 광고를 봐야 받던 것과 같습니다.
+    await processDownloadImage(false);
+
+    /* ── 광고 게이트 (출시 홍보 기간 동안 비활성) ──────────────────────
     const options = [
       '고화질 다운받기 (광고시청)',
       '일반 다운받기',
@@ -1119,6 +1127,7 @@ const VirtualFittingScreen = () => {
         }
       },
     );
+    ────────────────────────────────────────────────────────────── */
   };
 
   // 옷을 '선택/해제'하는 함수 (다중 선택 지원, 최대 3개 제한)
@@ -1605,7 +1614,7 @@ const styles = StyleSheet.create({
   },
   personThumbWrapper: {
     position: 'absolute',
-    top: 10,
+    top: 20,
     left: 20,
     width: 44,
     height: 44,
@@ -1707,7 +1716,7 @@ const styles = StyleSheet.create({
   },
   tryOnButtonContainer: {
     position: 'absolute',
-    top: 10,
+    top: 20,
     right: 20,
     alignItems: 'flex-end',
     justifyContent: 'center',
