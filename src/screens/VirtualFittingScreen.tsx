@@ -1035,6 +1035,23 @@ const VirtualFittingScreen = () => {
     }
   };
 
+  /**
+   * 결과 화면에서 '다른 옷' 버튼.
+   *
+   * **결과 사진은 지우지 않습니다.** 옷장을 열고 선택만 비웁니다 —
+   * 다음 옷을 고르는 동안에도 방금 입어본 모습이 화면에 남아 있어야
+   * 두 벌을 비교할 수 있습니다. 옷을 고르면 '이 옷으로 다시 피팅' 버튼이 나타납니다.
+   */
+  const openClosetForNextFitting = () => {
+    setSelectedClothingImages([]);
+    setIsPanelExpanded(true);
+    RNAnimated.timing(slideUpAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
   /** 내 사진 썸네일을 누르면 뜨는 메뉴. 구글 쇼핑의 '기존 사진 바꾸기 / 삭제'와 같습니다. */
   const handlePersonMenu = () => {
     const options = ['다른 사진으로 바꾸기', '사진 삭제', t('cancel')];
@@ -1229,8 +1246,12 @@ const VirtualFittingScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* 메인 이미지 영역 - 화면 전체를 차지 */}
+      {/* 메인 이미지 영역.
+          아래 옷장 패널은 접혀도 PANEL_PEEK_HEIGHT 만큼 화면에 남아 있습니다.
+          사진 영역을 화면 끝까지 잡으면 **합성 결과의 발목 쪽이 패널에 가립니다.**
+          그래서 패널이 차지할 높이를 미리 비워 둡니다. */}
       <View style={styles.mainImageContainer}>
+        <View style={[styles.imageStage, { marginBottom: PANEL_PEEK_HEIGHT }]}>
         {isProcessing ? (
           <View style={styles.processingContainer}>
             <CodiPopLoadingAnimation />
@@ -1262,10 +1283,12 @@ const VirtualFittingScreen = () => {
             </Text>
           </TouchableOpacity>
         )}
+        </View>
 
-        {/* 내 사진 — 구글 쇼핑처럼 우상단에 동그란 썸네일로 둡니다.
+        {/* 내 사진 — 구글 쇼핑처럼 동그란 썸네일로 둡니다.
             "사람 변경"이라는 글씨 박스를 놓는 것보다,
-            **지금 어떤 사진으로 입어보는 중인지**가 한눈에 보입니다. */}
+            **지금 어떤 사진으로 입어보는 중인지**가 한눈에 보입니다.
+            오른쪽 위는 '피팅 시작' 버튼 자리라 **왼쪽 위**에 둡니다. */}
         {personImage ? (
           <TouchableOpacity
             style={styles.personThumbWrapper}
@@ -1281,29 +1304,30 @@ const VirtualFittingScreen = () => {
             사진이 주인공이므로 글씨 박스 대신 **오른쪽에 원형 아이콘만** 세로로 둡니다.
             같은 기능을 훨씬 작은 면적으로 놓을 수 있어 사진이 가려지지 않습니다. */}
         {resultImage ? (
-          <View style={styles.resultActions}>
-            <CircleIconButton label="공유하기" onPress={handleShareImage}>
+          <View style={[styles.resultActions, { bottom: PANEL_PEEK_HEIGHT + 16 }]}>
+            <CircleIconButton label="공유하기" caption="공유" onPress={handleShareImage}>
               <ShareIcon size={22} />
             </CircleIconButton>
-            <CircleIconButton label="갤러리에 저장" onPress={handleDownloadImage}>
+            <CircleIconButton
+              label="갤러리에 저장"
+              caption="저장"
+              onPress={handleDownloadImage}>
               <DownloadIcon size={22} />
             </CircleIconButton>
             <CircleIconButton
-              label="다시 입어보기"
-              onPress={() => {
-                setResultImage(null);
-                setSelectedClothingImages([]);
-                setIsPanelExpanded(true);
-                RNAnimated.timing(slideUpAnim, {
-                  toValue: 1,
-                  duration: 300,
-                  useNativeDriver: true,
-                }).start();
-              }}>
+              label="다른 옷 고르기"
+              caption="다른 옷"
+              onPress={openClosetForNextFitting}>
               <RefreshIcon size={22} />
             </CircleIconButton>
           </View>
-        ) : (
+        ) : null}
+
+        {/* 피팅 시작 버튼.
+            예전에는 결과가 뜨면 이 버튼을 아예 숨겼습니다. 그래서 결과 화면에서
+            **다른 옷으로 다시 피팅할 방법이 화면에 없었습니다.**
+            지금은 옷이 선택되어 있으면 결과가 떠 있어도 계속 보여 줍니다. */}
+        {selectedClothingImages.length > 0 ? (
           <TouchableOpacity
             onPress={handleTryOn}
             activeOpacity={0.8}
@@ -1314,11 +1338,12 @@ const VirtualFittingScreen = () => {
               end={{ x: 1, y: 0 }}
               style={styles.tryOnButton}>
               <Text style={styles.tryOnButtonText}>
-                  피팅 시작 ({selectedClothingImages.length}개 선택)
-                </Text>
+                {resultImage ? '이 옷으로 다시 피팅' : '피팅 시작'} (
+                {selectedClothingImages.length}개 선택)
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
       {/* 하단 옷장 영역 - 드래그 가능한 패널 */}
@@ -1577,7 +1602,7 @@ const styles = StyleSheet.create({
   personThumbWrapper: {
     position: 'absolute',
     top: 10,
-    right: 20,
+    left: 20,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -1595,12 +1620,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  // 결과 화면 오른쪽에 세로로 놓이는 원형 버튼 묶음
+  // 결과 화면 오른쪽에 세로로 놓이는 원형 버튼 묶음.
+  // bottom 은 옷장 패널이 접혔을 때 남는 높이만큼 인라인으로 올려 줍니다 —
+  // 고정값으로 두면 패널이 버튼을 덮습니다.
   resultActions: {
     position: 'absolute',
     right: 16,
-    bottom: 24,
-    gap: 12,
+    gap: 10,
     alignItems: 'center',
   },
   ticketUnitHint: {
@@ -1616,6 +1642,11 @@ const styles = StyleSheet.create({
   },
   // 메인 이미지 영역 - 화면 전체를 차지
   mainImageContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  // 사진이 실제로 그려지는 칸. 아래쪽 여백(marginBottom)으로 옷장 패널 자리를 비웁니다.
+  imageStage: {
     flex: 1,
     position: 'relative',
   },

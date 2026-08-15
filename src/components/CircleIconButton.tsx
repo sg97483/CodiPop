@@ -29,6 +29,13 @@ type Props = {
   disabled?: boolean;
   /** 오른쪽 위에 붙는 작은 숫자/문자 (예: 남은 티켓) */
   badge?: string;
+  /**
+   * 원 아래에 붙는 짧은 설명.
+   *
+   * 공유·저장은 아이콘만으로 통하지만 '다른 옷'처럼 우리 앱에만 있는 동작은
+   * 아이콘만 두면 **무슨 버튼인지 아무도 모릅니다.** 두세 글자를 답니다.
+   */
+  caption?: string;
 };
 
 export const CircleIconButton: React.FC<Props> = ({
@@ -39,8 +46,9 @@ export const CircleIconButton: React.FC<Props> = ({
   style,
   disabled = false,
   badge,
+  caption,
 }) => {
-  return (
+  const circle = (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
@@ -63,6 +71,19 @@ export const CircleIconButton: React.FC<Props> = ({
         </View>
       ) : null}
     </TouchableOpacity>
+  );
+
+  if (!caption) {
+    return circle;
+  }
+
+  return (
+    <View style={styles.withCaption}>
+      {circle}
+      <Text style={styles.caption} numberOfLines={1}>
+        {caption}
+      </Text>
+    </View>
   );
 };
 
@@ -97,5 +118,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '700',
+  },
+  withCaption: {
+    alignItems: 'center',
+  },
+  caption: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2C3A57',
+    // 합성 사진은 밝을 수도 어두울 수도 있습니다. 흰 테두리를 둘러
+    // 어느 쪽에서도 글씨가 묻히지 않게 합니다.
+    textShadowColor: 'rgba(255,255,255,0.9)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 3,
   },
 });
