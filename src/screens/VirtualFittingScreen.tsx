@@ -1324,10 +1324,14 @@ const VirtualFittingScreen = () => {
         ) : null}
 
         {/* 피팅 시작 버튼.
-            예전에는 결과가 뜨면 이 버튼을 아예 숨겼습니다. 그래서 결과 화면에서
+            결과가 뜨면 이 버튼을 아예 숨겼던 탓에 결과 화면에서
             **다른 옷으로 다시 피팅할 방법이 화면에 없었습니다.**
-            지금은 옷이 선택되어 있으면 결과가 떠 있어도 계속 보여 줍니다. */}
-        {selectedClothingImages.length > 0 ? (
+            지금은 옷이 선택되어 있으면 결과가 떠 있어도 계속 보여 줍니다.
+
+            선택이 0개일 때도 **결과 전에는 계속 띄웁니다.** 버튼이 아예 사라지면
+            "여기서 뭘 해야 하지"가 되고, 눌렀을 때의 안내(`handleTryOn` 이 막습니다)가
+            버튼이 없는 것보다 훨씬 친절합니다. */}
+        {!resultImage || selectedClothingImages.length > 0 ? (
           <TouchableOpacity
             onPress={handleTryOn}
             activeOpacity={0.8}
